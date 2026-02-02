@@ -1,0 +1,54 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true,
+    "node": true,
+    "jquery": true
+  },
+  "extends": [
+    "eslint:recommended"
+  ],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "script"
+  },
+  "globals": {
+    "$": "readonly",
+    "jQuery": "readonly",
+    "introJs": "readonly",
+    "ApexCharts": "readonly",
+    "MtrDatepicker": "readonly",
+    "define": "readonly",
+    "Clipboard": "readonly",
+    "DOMPurify": "readonly",
+    "Morris": "readonly",
+    "peerConnection": "writable",
+    "series": "readonly",
+    "index": "readonly",
+    "gval": "writable",
+    "bval": "writable"
+  },
+  "rules": {
+    "no-unused-vars": "warn",
+    "no-undef": "warn",
+    "no-console": "off",
+    "no-var": "off",
+    "prefer-const": "off",
+    "eqeqeq": "off",
+    "camelcase": "off",
+    "no-tabs": "warn",
+    "no-mixed-spaces-and-tabs": "warn",
+    "no-sequences": "warn",
+    "no-unused-expressions": "warn",
+    "no-cond-assign": "warn",
+    "no-inner-declarations": "warn",
+    "no-redeclare": "warn",
+    "no-constant-condition": "warn",
+    "no-fallthrough": "warn",
+    "no-useless-escape": "warn",
+    "no-unexpected-multiline": "warn",
+    "indent": "off",
+    "quotes": "off",
+    "semi": "off"
+  }
+}

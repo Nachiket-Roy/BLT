@@ -1,42 +1,42 @@
 // Toggle row expansion for team overview table
-function toggleRow(row) {
-    const expandableContents = row.getElementsByClassName('expandable-content');
-    for (let content of expandableContents) {
-        const shortText = content.querySelector('.short-text');
-        const fullText = content.querySelector('.full-text');
-        
-        if (shortText.classList.contains('hidden')) {
-            shortText.classList.remove('hidden');
-            fullText.classList.add('hidden');
-        } else {
-            shortText.classList.add('hidden');
-            fullText.classList.remove('hidden');
-        }
+function toggleRow (row) {
+  const expandableContents = row.getElementsByClassName('expandable-content');
+  for (const content of expandableContents) {
+    const shortText = content.querySelector('.short-text');
+    const fullText = content.querySelector('.full-text');
+
+    if (shortText.classList.contains('hidden')) {
+      shortText.classList.remove('hidden');
+      fullText.classList.add('hidden');
+    } else {
+      shortText.classList.add('hidden');
+      fullText.classList.remove('hidden');
     }
+  }
 }
 
 // Main initialization
-document.addEventListener('DOMContentLoaded', function() {
-    const tableBody = document.getElementById('statusTableBody');
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const filterPanels = document.querySelectorAll('.filter-panel');
-    
-    if (!tableBody) {
-        return;
-    }
-    
-    const initialReportCount = tableBody.dataset.initialCount || 0;
-    
-    let currentTab = null;
-    let taskSearchTimeout = null;
-    let requestIdCounter = 0;
-    let currentRequestId = 0;
+document.addEventListener('DOMContentLoaded', function () {
+  const tableBody = document.getElementById('statusTableBody');
+  const tabButtons = document.querySelectorAll('.tab-button');
+  const filterPanels = document.querySelectorAll('.filter-panel');
 
-    function updateTable(data) {
-        tableBody.innerHTML = '';
-        
-        if (!data || data.length === 0) {
-            tableBody.innerHTML = `
+  if (!tableBody) {
+    return;
+  }
+
+  const initialReportCount = tableBody.dataset.initialCount || 0;
+
+  let currentTab = null;
+  let taskSearchTimeout = null;
+  let requestIdCounter = 0;
+  let currentRequestId = 0;
+
+  function updateTable (data) {
+    tableBody.innerHTML = '';
+
+    if (!data || data.length === 0) {
+      tableBody.innerHTML = `
                 <tr>
                     <td colspan="7" class="px-6 py-12 text-center">
                         <div class="flex flex-col items-center">
@@ -49,35 +49,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                 </tr>
             `;
-            return;
-        }
-        
-        data.forEach((report, index) => {
-            const row = document.createElement('tr');
-            row.className = 'hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 cursor-pointer';
-            row.onclick = () => toggleRow(row);
-            
-            const avatarUrl = report.avatar_url || '/static/images/dummy-user.png';
-            const previousWork = report.previous_work || '';
-            const nextPlan = report.next_plan || '';
-            const blockers = report.blockers || '';
-            
-            // Helper to escape HTML
-            const escapeHtml = (text) => {
-                const div = document.createElement('div');
-                div.textContent = text;
-                return div.innerHTML;
-            };
-            
-            const escapedUsername     = escapeHtml(report.username);
-            const escapedDate         = escapeHtml(report.date);
-            const escapedAvatarUrl    = escapeHtml(avatarUrl);
-            const escapedPreviousWork = escapeHtml(previousWork);
-            const escapedNextPlan     = escapeHtml(nextPlan);
-            const escapedBlockers     = escapeHtml(blockers);
-            const escapedMood         = escapeHtml(report.current_mood || '😊');
-            
-            row.innerHTML = `
+      return;
+    }
+
+    data.forEach((report, index) => {
+      const row = document.createElement('tr');
+      row.className = 'hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 cursor-pointer';
+      row.onclick = () => toggleRow(row);
+
+      const avatarUrl = report.avatar_url || '/static/images/dummy-user.png';
+      const previousWork = report.previous_work || '';
+      const nextPlan = report.next_plan || '';
+      const blockers = report.blockers || '';
+
+      // Helper to escape HTML
+      const escapeHtml = (text) => {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      };
+
+      const escapedUsername = escapeHtml(report.username);
+      const escapedDate = escapeHtml(report.date);
+      const escapedAvatarUrl = escapeHtml(avatarUrl);
+      const escapedPreviousWork = escapeHtml(previousWork);
+      const escapedNextPlan = escapeHtml(nextPlan);
+      const escapedBlockers = escapeHtml(blockers);
+      const escapedMood = escapeHtml(report.current_mood || '😊');
+
+      row.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex items-center">
                         <img src="${escapedAvatarUrl}" alt="${escapedUsername}" class="w-8 h-8 rounded-full mr-3 object-cover">
@@ -114,22 +114,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="text-xl">${escapedMood}</div>
                 </td>
             `;
-            tableBody.appendChild(row);
-        });
-    }
+      tableBody.appendChild(row);
+    });
+  }
 
-    function fetchFilteredData(filterType, filterValue) {
-        // Increment and store request ID to prevent race conditions
-        requestIdCounter++;
-        const thisRequestId = requestIdCounter;
-        currentRequestId = thisRequestId;
-        
-        const url = new URL(window.location.href);
-        url.searchParams.set('filter_type', filterType);
-        url.searchParams.set('filter_value', filterValue);
-        
-        // Show loading indicator
-        tableBody.innerHTML = `
+  function fetchFilteredData (filterType, filterValue) {
+    // Increment and store request ID to prevent race conditions
+    requestIdCounter++;
+    const thisRequestId = requestIdCounter;
+    currentRequestId = thisRequestId;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('filter_type', filterType);
+    url.searchParams.set('filter_value', filterValue);
+
+    // Show loading indicator
+    tableBody.innerHTML = `
             <tr>
                 <td colspan="7" class="px-6 py-12 text-center">
                         <div class="flex flex-col items-center">
@@ -140,46 +140,46 @@ document.addEventListener('DOMContentLoaded', function() {
             </tr>
         `;
 
-        fetch(url, {
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => {
-            // Guard against stale responses
-            if (thisRequestId !== currentRequestId) {
-                return null;
-            }
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Guard against stale responses
-            if (thisRequestId !== currentRequestId) {
-                return;
-            }
-            
-            // Handle null response from discarded request
-            if (data === null) {
-                return;
-            }
-            
-            if (data && data.data !== undefined) {
-                updateTable(data.data);
-            } else {
-                throw new Error('Invalid data format received');
-            }
-        })
-        .catch(error => {
-            // Guard against stale error handlers
-            if (thisRequestId !== currentRequestId) {
-                return;
-            }
-            
-            tableBody.innerHTML = `
+    fetch(url, {
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+      .then(response => {
+        // Guard against stale responses
+        if (thisRequestId !== currentRequestId) {
+          return null;
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        // Guard against stale responses
+        if (thisRequestId !== currentRequestId) {
+          return;
+        }
+
+        // Handle null response from discarded request
+        if (data === null) {
+          return;
+        }
+
+        if (data && data.data !== undefined) {
+          updateTable(data.data);
+        } else {
+          throw new Error('Invalid data format received');
+        }
+      })
+      .catch(error => {
+        // Guard against stale error handlers
+        if (thisRequestId !== currentRequestId) {
+          return;
+        }
+
+        tableBody.innerHTML = `
                 <tr>
                     <td colspan="7" class="px-6 py-12 text-center">
                         <div class="flex flex-col items-center">
@@ -194,104 +194,104 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                 </tr>
             `;
-        });
-    }
+      });
+  }
 
-    function switchTab(tabName) {
-        tabButtons.forEach(button => {
-            if (button.dataset.tab === tabName) {
-                button.classList.add('border-[#e74c3c]', 'text-[#e74c3c]', 'bg-[#e74c3c]/5');
-                button.classList.remove('border-gray-300', 'text-gray-700');
-            } else {
-                button.classList.remove('border-[#e74c3c]', 'text-[#e74c3c]', 'bg-[#e74c3c]/5');
-                button.classList.add('border-gray-300', 'text-gray-700');
-            }
-        });
-
-        filterPanels.forEach(panel => {
-            panel.classList.add('hidden');
-        });
-        
-        const targetPanel = document.getElementById(`${tabName}-panel`);
-        if (targetPanel) {
-            targetPanel.classList.remove('hidden');
-        }
-        
-        if (currentTab !== tabName) {
-            const userFilter = document.getElementById('user-filter');
-            const dateFilter = document.getElementById('date-filter');
-            const goalFilter = document.getElementById('goal-filter');
-            const taskFilter = document.getElementById('task-filter');
-            
-            if (userFilter) userFilter.value = '';
-            if (dateFilter) dateFilter.value = '';
-            if (goalFilter) goalFilter.value = '';
-            if (taskFilter) taskFilter.value = '';
-            
-            fetchFilteredData('none', '');
-        }
-        
-        currentTab = tabName;
-    }
-
-    // Add event listeners to tab buttons
+  function switchTab (tabName) {
     tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            switchTab(button.dataset.tab);
-        });
+      if (button.dataset.tab === tabName) {
+        button.classList.add('border-[#e74c3c]', 'text-[#e74c3c]', 'bg-[#e74c3c]/5');
+        button.classList.remove('border-gray-300', 'text-gray-700');
+      } else {
+        button.classList.remove('border-[#e74c3c]', 'text-[#e74c3c]', 'bg-[#e74c3c]/5');
+        button.classList.add('border-gray-300', 'text-gray-700');
+      }
     });
 
-    // Add event listeners to filters with null checks
-    const userFilter = document.getElementById('user-filter');
-    const dateFilter = document.getElementById('date-filter');
-    const goalFilter = document.getElementById('goal-filter');
-    const taskFilter = document.getElementById('task-filter');
+    filterPanels.forEach(panel => {
+      panel.classList.add('hidden');
+    });
 
-    if (userFilter) {
-        userFilter.addEventListener('change', function() {
-            if (this.value) {
-                fetchFilteredData('user', this.value);
-            } else {
-                fetchFilteredData('none', '');
-            }
-        });
+    const targetPanel = document.getElementById(`${tabName}-panel`);
+    if (targetPanel) {
+      targetPanel.classList.remove('hidden');
     }
 
-    if (dateFilter) {
-        dateFilter.addEventListener('change', function() {
-            if (this.value) {
-                fetchFilteredData('date', this.value);
-            } else {
-                fetchFilteredData('none', '');
-            }
-        });
+    if (currentTab !== tabName) {
+      const userFilter = document.getElementById('user-filter');
+      const dateFilter = document.getElementById('date-filter');
+      const goalFilter = document.getElementById('goal-filter');
+      const taskFilter = document.getElementById('task-filter');
+
+      if (userFilter) userFilter.value = '';
+      if (dateFilter) dateFilter.value = '';
+      if (goalFilter) goalFilter.value = '';
+      if (taskFilter) taskFilter.value = '';
+
+      fetchFilteredData('none', '');
     }
 
-    if (goalFilter) {
-        goalFilter.addEventListener('change', function() {
-            if (this.value) {
-                fetchFilteredData('goal', this.value);
-            } else {
-                fetchFilteredData('none', '');
-            }
-        });
-    }
+    currentTab = tabName;
+  }
 
-    if (taskFilter) {
-        taskFilter.addEventListener('input', function() {
-            const searchValue = this.value.trim();
-            
-            clearTimeout(taskSearchTimeout);
-            taskSearchTimeout = setTimeout(() => {
-                if (searchValue) {
-                    fetchFilteredData('task', searchValue);
-                } else {
-                    fetchFilteredData('none', '');
-                }
-            }, 300);
-        });
-    }
+  // Add event listeners to tab buttons
+  tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      switchTab(button.dataset.tab);
+    });
+  });
 
-    // Initialize by showing user tab
-    switchTab('user');
+  // Add event listeners to filters with null checks
+  const userFilter = document.getElementById('user-filter');
+  const dateFilter = document.getElementById('date-filter');
+  const goalFilter = document.getElementById('goal-filter');
+  const taskFilter = document.getElementById('task-filter');
+
+  if (userFilter) {
+    userFilter.addEventListener('change', function () {
+      if (this.value) {
+        fetchFilteredData('user', this.value);
+      } else {
+        fetchFilteredData('none', '');
+      }
+    });
+  }
+
+  if (dateFilter) {
+    dateFilter.addEventListener('change', function () {
+      if (this.value) {
+        fetchFilteredData('date', this.value);
+      } else {
+        fetchFilteredData('none', '');
+      }
+    });
+  }
+
+  if (goalFilter) {
+    goalFilter.addEventListener('change', function () {
+      if (this.value) {
+        fetchFilteredData('goal', this.value);
+      } else {
+        fetchFilteredData('none', '');
+      }
+    });
+  }
+
+  if (taskFilter) {
+    taskFilter.addEventListener('input', function () {
+      const searchValue = this.value.trim();
+
+      clearTimeout(taskSearchTimeout);
+      taskSearchTimeout = setTimeout(() => {
+        if (searchValue) {
+          fetchFilteredData('task', searchValue);
+        } else {
+          fetchFilteredData('none', '');
+        }
+      }, 300);
+    });
+  }
+
+  // Initialize by showing user tab
+  switchTab('user');
 });

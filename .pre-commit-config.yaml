@@ -26,6 +26,15 @@ repos:
           - --fix
       - id: ruff-format
 
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: npx eslint --max-warnings=-1
+        language: system
+        files: \.(js|jsx|ts|tsx)$
+        pass_filenames: true
+
   - repo: https://github.com/djlint/djLint
     rev: v1.36.1
     hooks:
@@ -42,7 +51,7 @@ repos:
         args: [pre-commit-hooks/check_style_tags.py]
         language: python
         types: [html]
-        pass_filenames: false  # <-- ADD THIS LINE
+        pass_filenames: false
         verbose: true
 
   - repo: local
@@ -63,6 +72,5 @@ repos:
         pass_filenames: false
         always_run: true
         verbose: true
-
 
 fail_fast: true

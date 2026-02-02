@@ -1,76 +1,74 @@
-function validateCrypto() {
-    let selectedCrypto = document.forms["cryptoForm"]["selected_crypto"].value;
-    let address = document.forms["cryptoForm"]["new_address"].value;
-    var isValid;
-    if (selectedCrypto == "Bitcoin") {
-        isValid = validateBitCoin(address);
-    } else if (selectedCrypto == "Ethereum") {
-        isValid = validateEthereum(address);
-    } else if (selectedCrypto == "BitcoinCash") {
-        isValid = validateBCH(address)
-    } else {
-        $.notify("Select a Crypto to Continue!", {
-            style: "custom",
-            className: "danger"
-        });
-    }
-    if (!isValid) {
-        $.notify("Enter a valid Crypto Address!", {
-            style: "custom",
-            className: "danger"
-        });
-    }
-    return isValid;
+function validateCrypto () {
+  const selectedCrypto = document.forms.cryptoForm.selected_crypto.value;
+  const address = document.forms.cryptoForm.new_address.value;
+  let isValid;
+  if (selectedCrypto == 'Bitcoin') {
+    isValid = validateBitCoin(address);
+  } else if (selectedCrypto == 'Ethereum') {
+    isValid = validateEthereum(address);
+  } else if (selectedCrypto == 'BitcoinCash') {
+    isValid = validateBCH(address);
+  } else {
+    $.notify('Select a Crypto to Continue!', {
+      style: 'custom',
+      className: 'danger'
+    });
+  }
+  if (!isValid) {
+    $.notify('Enter a valid Crypto Address!', {
+      style: 'custom',
+      className: 'danger'
+    });
+  }
+  return isValid;
 }
 
-function validateBCH(address) {
-    /*** 
+function validateBCH (address) {
+  /** *
      * Params: BCH Address
      * ***/
-    if (address == null || address == "" || address == " ") {
-        return "empty";
-    }
-    if (address.startsWith("bitcoincash:")) {
-        address = address.slice(12);
-    }
-    let regex = new RegExp(/^[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{42}$/);
+  if (address == null || address == '' || address == ' ') {
+    return 'empty';
+  }
+  if (address.startsWith('bitcoincash:')) {
+    address = address.slice(12);
+  }
+  const regex = new RegExp(/^[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{42}$/);
 
-    if (!regex.test(address) == true) {
-        return false;
-    }
-    return true;
+  if (!regex.test(address) == true) {
+    return false;
+  }
+  return true;
 }
 
-
-function validateEthereum(address) {
-    /*** 
+function validateEthereum (address) {
+  /** *
     * Params: Ethereum Address
     * ***/
 
-    let regex = new RegExp(/^(0x)?[0-9a-fA-F]{40}$/);
+  const regex = new RegExp(/^(0x)?[0-9a-fA-F]{40}$/);
 
-    if (address == null || address == "" || address == " ") {
-        return "empty";
-    } else if (regex.test(address) == true) {
-        return true;
-    } else {
-        return false;
-    }
-
+  if (address == null || address == '' || address == ' ') {
+    return 'empty';
+  } else if (regex.test(address) == true) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
-function validateBitCoin(address) {
-    /*** 
+function validateBitCoin (address) {
+  /** *
      * Params: BitCoin Address
      * ***/
-    let regex = new RegExp(/^(bc1|[13])[a-km-zA-HJ-NP-Z1-9]{25,34}$/);
-    if (address == null || address == "" || address == " ") {
-        return "empty";
-    } else if (regex.test(address) == true) {
-        return true;
-    } else {
-        return false;
-    }
+  const regex = new RegExp(/^(bc1|[13])[a-km-zA-HJ-NP-Z1-9]{25,34}$/);
+  if (address == null || address == '' || address == ' ') {
+    return 'empty';
+  } else if (regex.test(address) == true) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 // async function CryptoEditForm(crypto, selected_c) {
@@ -94,7 +92,7 @@ function validateBitCoin(address) {
 //         const data = {
 //             selected_crypto: selected_c,
 //             new_address: crypto
-//           };          
+//           };
 //         const request = await fetch("/update_bch_address/", {
 //             method: 'POST',
 //             headers: {
@@ -161,7 +159,7 @@ function validateBitCoin(address) {
 //     validateBCH(bch[i])
 // }
 
-// Ethereum validator 
+// Ethereum validator
 
 // const ethAddresses = [
 //     '0x742d35Cc6634C0532925a3b844Bc454e4438f44e', // valid

@@ -4,21 +4,34 @@ Thank you for your interest in contributing to OWASP BLT! We welcome contributio
 
 ## Table of Contents
 
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-  - [Development Environment Setup](#development-environment-setup)
-  - [Docker Setup (Recommended)](#docker-setup-recommended)
-  - [Vagrant Setup](#vagrant-setup)
-  - [Python Virtual Environment Setup](#python-virtual-environment-setup)
-  - [Populating Test Data for Local Development](#populating-test-data-for-local-development)
-- [Making Contributions](#making-contributions)
-  - [Finding Issues to Work On](#finding-issues-to-work-on)
-  - [Creating a Pull Request](#creating-a-pull-request)
-  - [Pull Request Guidelines](#pull-request-guidelines)
-- [Coding Standards](#coding-standards)
-- [Testing](#testing)
-- [Documentation](#documentation)
-- [Community](#community)
+- [Contributing to OWASP BLT](#contributing-to-owasp-blt)
+  - [Table of Contents](#table-of-contents)
+  - [Code of Conduct](#code-of-conduct)
+  - [Getting Started](#getting-started)
+    - [Development Environment Setup](#development-environment-setup)
+      - [Prerequisites](#prerequisites)
+    - [Docker Setup (Recommended)](#docker-setup-recommended)
+    - [Vagrant Setup](#vagrant-setup)
+    - [Python Virtual Environment Setup](#python-virtual-environment-setup)
+    - [Optional: Python Virtual Environment Setup using `uv`](#optional-python-virtual-environment-setup-using-uv)
+      - [Install `uv`](#install-uv)
+      - [Set up the BLT project using `uv`](#set-up-the-blt-project-using-uv)
+    - [Populating Test Data for Local Development](#populating-test-data-for-local-development)
+      - [Generate Sample Data](#generate-sample-data)
+    - [Additional Seed Commands](#additional-seed-commands)
+      - [1. Seed OWASP BLT Adventures](#1-seed-owasp-blt-adventures)
+      - [2. Seed Security Lab Challenges](#2-seed-security-lab-challenges)
+      - [Important Notes](#important-notes)
+      - [Full Local Setup Example](#full-local-setup-example)
+  - [Making Contributions](#making-contributions)
+    - [Finding Issues to Work On](#finding-issues-to-work-on)
+    - [Creating a Pull Request](#creating-a-pull-request)
+    - [Pull Request Guidelines](#pull-request-guidelines)
+  - [Coding Standards](#coding-standards)
+    - [JavaScript Code Standards](#javascript-code-standards)
+  - [Testing](#testing)
+  - [Documentation](#documentation)
+  - [Community](#community)
 
 ## Code of Conduct
 
@@ -286,8 +299,15 @@ We use several tools to maintain code quality:
 - Black for code formatting
 - isort for import sorting
 - ruff for linting
+- ESLint for linting
 
-You can run these tools using Poetry:
+You can run the JavaScript and Python linting tools as follows:
+
+```bash
+npm install
+```
+
+Run Python linters/formatters:
 
 ```bash
 poetry run black .

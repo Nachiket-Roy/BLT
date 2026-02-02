@@ -5,14 +5,14 @@
  */
 
 const DebugPanel = {
-  apiBaseUrl: "/api/debug",
-  statusElement: "#dev-status-content",
-  statusContainer: "#dev-status-messages",
+  apiBaseUrl: '/api/debug',
+  statusElement: '#dev-status-content',
+  statusContainer: '#dev-status-messages',
 
   /**
    * Initialize debug panel event listeners
    */
-  init() {
+  init () {
     if (!this.isDebugMode()) {
       return;
     }
@@ -33,21 +33,21 @@ const DebugPanel = {
   /**
    * Verify authentication status
    */
-  verifyAuth() {
+  verifyAuth () {
     return new Promise((resolve) => {
       this.makeRequest(
-        "GET",
+        'GET',
         `${this.apiBaseUrl}/system-stats/`,
         null,
         () => {
-          this.showStatus("✓ Authentication verified", "success");
+          this.showStatus('✓ Authentication verified', 'success');
           this.authVerified = true;
           resolve(true);
         },
         (error) => {
           this.showStatus(
             `✗ Authentication failed: ${error}. Debug panel disabled.`,
-            "error"
+            'error'
           );
           this.authVerified = false;
           resolve(false);
@@ -56,20 +56,20 @@ const DebugPanel = {
     });
   },
 
-  disablePanel() {
+  disablePanel () {
     // Disable buttons and stop any polling; keep a visible status message
     const ids = [
-      "populate-data-btn",
-      "clear-cache-btn",
-      "check-performance-btn",
-      "management-commands-btn",
+      'populate-data-btn',
+      'clear-cache-btn',
+      'check-performance-btn',
+      'management-commands-btn'
     ];
     ids.forEach((id) => {
       const btn = document.getElementById(id);
       if (btn) {
         btn.disabled = true;
-        btn.classList.add("opacity-50");
-        btn.classList.add("pointer-events-none");
+        btn.classList.add('opacity-50');
+        btn.classList.add('pointer-events-none');
       }
     });
   },
@@ -77,35 +77,35 @@ const DebugPanel = {
   /**
    * Check if debug mode is enabled
    */
-  isDebugMode() {
-    return document.getElementById("dev-panel") !== null;
+  isDebugMode () {
+    return document.getElementById('dev-panel') !== null;
   },
 
   /**
    * Setup all event listeners for debug panel buttons
    */
-  setupEventListeners() {
+  setupEventListeners () {
     document
-      .getElementById("populate-data-btn")
-      ?.addEventListener("click", () => this.populateTestData());
+      .getElementById('populate-data-btn')
+      ?.addEventListener('click', () => this.populateTestData());
     document
-      .getElementById("clear-cache-btn")
-      ?.addEventListener("click", () => this.clearCache());
+      .getElementById('clear-cache-btn')
+      ?.addEventListener('click', () => this.clearCache());
     document
-      .getElementById("check-performance-btn")
-      ?.addEventListener("click", () => this.checkPerformance());
+      .getElementById('check-performance-btn')
+      ?.addEventListener('click', () => this.checkPerformance());
     document
-      .getElementById("management-commands-btn")
-      ?.addEventListener("click", () => this.goToManagementCommands());
+      .getElementById('management-commands-btn')
+      ?.addEventListener('click', () => this.goToManagementCommands());
     document
-      .getElementById("toggle-dev-panel")
-      ?.addEventListener("click", () => this.togglePanel());
+      .getElementById('toggle-dev-panel')
+      ?.addEventListener('click', () => this.togglePanel());
   },
 
   /**
    * Load initial statistics
    */
-  loadInitialStats() {
+  loadInitialStats () {
     this.updateSystemStats();
     this.updateCacheStats();
   },
@@ -113,9 +113,9 @@ const DebugPanel = {
   /**
    * Update system statistics
    */
-  updateSystemStats() {
+  updateSystemStats () {
     this.makeRequest(
-      "GET",
+      'GET',
       `${this.apiBaseUrl}/system-stats/`,
       null,
       (data) => {
@@ -125,7 +125,7 @@ const DebugPanel = {
           const memoryEl = document.querySelector('[data-stat="memory"]');
           if (memoryEl && stats.memory) {
             const memValue =
-              typeof stats.memory === "object"
+              typeof stats.memory === 'object'
                 ? stats.memory.used || stats.memory
                 : stats.memory;
             memoryEl.textContent = memValue;
@@ -140,14 +140,14 @@ const DebugPanel = {
             '[data-stat="python_version"]'
           );
           if (pythonEl && stats.python_version) {
-            pythonEl.textContent = stats.python_version.split(" ")[0];
+            pythonEl.textContent = stats.python_version.split(' ')[0];
           }
 
           const djangoEl = document.querySelector(
             '[data-stat="django_version"]'
           );
           if (djangoEl && stats.django_version) {
-            djangoEl.textContent = stats.django_version.split(" ")[0];
+            djangoEl.textContent = stats.django_version.split(' ')[0];
           }
 
           const dbConnectionsEl = document.querySelector(
@@ -166,13 +166,13 @@ const DebugPanel = {
   /**
    * Update database statistics from system stats response
    */
-  updateDatabaseStatsFromSystemStats(stats) {
+  updateDatabaseStatsFromSystemStats (stats) {
     const elements = {
-      "user-count": stats.database?.user_count,
-      "issue-count": stats.database?.issue_count,
-      "org-count": stats.database?.org_count,
-      "domain-count": stats.database?.domain_count,
-      "repo-count": stats.database?.repo_count,
+      'user-count': stats.database?.user_count,
+      'issue-count': stats.database?.issue_count,
+      'org-count': stats.database?.org_count,
+      'domain-count': stats.database?.domain_count,
+      'repo-count': stats.database?.repo_count
     };
 
     Object.entries(elements).forEach(([id, value]) => {
@@ -186,27 +186,27 @@ const DebugPanel = {
   /**
    * Update cache statistics
    */
-  updateCacheStats() {
+  updateCacheStats () {
     this.makeRequest(
-      "GET",
+      'GET',
       `${this.apiBaseUrl}/cache-info/`,
       null,
       (data) => {
         if (data.success) {
           const cacheInfo = data.data;
-          const cacheBackendEl = document.getElementById("cache-backend");
-          const cacheKeysEl = document.getElementById("cache-keys");
-          const cacheHitRatioEl = document.getElementById("cache-hit-ratio");
+          const cacheBackendEl = document.getElementById('cache-backend');
+          const cacheKeysEl = document.getElementById('cache-keys');
+          const cacheHitRatioEl = document.getElementById('cache-hit-ratio');
 
           if (cacheBackendEl) {
-            cacheBackendEl.textContent = cacheInfo.backend || "Unknown";
+            cacheBackendEl.textContent = cacheInfo.backend || 'Unknown';
           }
           if (cacheKeysEl) {
-            cacheKeysEl.textContent = cacheInfo.keys_count || "0";
+            cacheKeysEl.textContent = cacheInfo.keys_count || '0';
           }
           if (cacheHitRatioEl) {
             const hitRatio = parseFloat(cacheInfo.hit_ratio);
-            cacheHitRatioEl.textContent = Number.isNaN(hitRatio) ? "N/A" : `${hitRatio.toFixed(2)}%`;
+            cacheHitRatioEl.textContent = Number.isNaN(hitRatio) ? 'N/A' : `${hitRatio.toFixed(2)}%`;
           }
         }
       }
@@ -216,30 +216,30 @@ const DebugPanel = {
   /**
    * Populate test data
    */
-  populateTestData() {
+  populateTestData () {
     if (
       !confirm(
-        "Are you sure you want to populate test data? This may take a while."
+        'Are you sure you want to populate test data? This may take a while.'
       )
     ) {
       return;
     }
 
-    this.showStatus("Populating test data...", "info");
+    this.showStatus('Populating test data...', 'info');
     this.makeRequest(
-      "POST",
+      'POST',
       `${this.apiBaseUrl}/populate-data/`,
       { confirm: true },
       (data) => {
         if (data.success) {
-          this.showStatus("Test data populated successfully!", "success");
+          this.showStatus('Test data populated successfully!', 'success');
           setTimeout(() => this.loadInitialStats(), 1000);
         } else {
-          this.showStatus(`Error: ${data.error || "Unknown error"}`, "error");
+          this.showStatus(`Error: ${data.error || 'Unknown error'}`, 'error');
         }
       },
       (error) => {
-        this.showStatus(`Error: ${error}`, "error");
+        this.showStatus(`Error: ${error}`, 'error');
       }
     );
   },
@@ -247,26 +247,26 @@ const DebugPanel = {
   /**
    * Clear cache
    */
-  clearCache() {
-    if (!confirm("Are you sure you want to clear all cache?")) {
+  clearCache () {
+    if (!confirm('Are you sure you want to clear all cache?')) {
       return;
     }
 
-    this.showStatus("Clearing cache...", "info");
+    this.showStatus('Clearing cache...', 'info');
     this.makeRequest(
-      "POST",
+      'POST',
       `${this.apiBaseUrl}/clear-cache/`,
       null,
       (data) => {
         if (data.success) {
-          this.showStatus("Cache cleared successfully!", "success");
+          this.showStatus('Cache cleared successfully!', 'success');
           this.updateCacheStats();
         } else {
-          this.showStatus(`Error: ${data.error || "Unknown error"}`, "error");
+          this.showStatus(`Error: ${data.error || 'Unknown error'}`, 'error');
         }
       },
       (error) => {
-        this.showStatus(`Error: ${error}`, "error");
+        this.showStatus(`Error: ${error}`, 'error');
       }
     );
   },
@@ -274,10 +274,10 @@ const DebugPanel = {
   /**
    * Check performance metrics
    */
-  checkPerformance() {
-    this.showStatus("Checking performance...", "info");
+  checkPerformance () {
+    this.showStatus('Checking performance...', 'info');
     this.makeRequest(
-      "GET",
+      'GET',
       `${this.apiBaseUrl}/system-stats/`,
       null,
       (data) => {
@@ -286,29 +286,29 @@ const DebugPanel = {
           const performanceReport = `
 Performance Report (${new Date().toLocaleTimeString()}):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Python: ${stats.python_version || "N/A"}
-Django: ${stats.django_version || "N/A"}
-Database: ${stats.database?.name || "N/A"} (${stats.database?.engine || "N/A"})
+Python: ${stats.python_version || 'N/A'}
+Django: ${stats.django_version || 'N/A'}
+Database: ${stats.database?.name || 'N/A'} (${stats.database?.engine || 'N/A'})
 Memory: ${
-            typeof stats.memory === "object"
-              ? stats.memory.used || stats.memory
-              : stats.memory || "N/A"
-          }
-Disk: ${stats.disk?.used || "N/A"} / ${stats.disk?.total || "N/A"}
-CPU: ${stats.cpu?.percent || "N/A"}
-DB Connections: ${stats.database?.connections || "N/A"}
+  typeof stats.memory === 'object'
+    ? stats.memory.used || stats.memory
+    : stats.memory || 'N/A'
+}
+Disk: ${stats.disk?.used || 'N/A'} / ${stats.disk?.total || 'N/A'}
+CPU: ${stats.cpu?.percent || 'N/A'}
+DB Connections: ${stats.database?.connections || 'N/A'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
-          this.showStatus(performanceReport, "success");
+          this.showStatus(performanceReport, 'success');
         } else {
           this.showStatus(
-            `Error: ${data.error || "Failed to fetch performance data"}`,
-            "error"
+            `Error: ${data.error || 'Failed to fetch performance data'}`,
+            'error'
           );
         }
       },
       (error) => {
-        this.showStatus(`Error: ${error}`, "error");
+        this.showStatus(`Error: ${error}`, 'error');
       }
     );
   },
@@ -316,16 +316,16 @@ DB Connections: ${stats.database?.connections || "N/A"}
   /**
    * Toggle debug panel visibility
    */
-  togglePanel() {
-    const content = document.getElementById("dev-panel-content");
-    const button = document.getElementById("toggle-dev-panel");
+  togglePanel () {
+    const content = document.getElementById('dev-panel-content');
+    const button = document.getElementById('toggle-dev-panel');
 
     if (content) {
-      content.classList.toggle("hidden");
-      const icon = button?.querySelector("i");
+      content.classList.toggle('hidden');
+      const icon = button?.querySelector('i');
       if (icon) {
-        icon.classList.toggle("fa-chevron-up");
-        icon.classList.toggle("fa-chevron-down");
+        icon.classList.toggle('fa-chevron-up');
+        icon.classList.toggle('fa-chevron-down');
       }
     }
   },
@@ -333,7 +333,7 @@ DB Connections: ${stats.database?.connections || "N/A"}
   /**
    * Show status message
    */
-  showStatus(message, type = "info") {
+  showStatus (message, type = 'info') {
     const statusContainer = document.querySelector(this.statusContainer);
     const statusContent = document.querySelector(this.statusElement);
 
@@ -341,10 +341,10 @@ DB Connections: ${stats.database?.connections || "N/A"}
       return;
     }
 
-    statusContainer.classList.remove("hidden");
+    statusContainer.classList.remove('hidden');
     const timestamp = new Date().toLocaleTimeString();
     const colorClass = this.getStatusColor(type);
-    const messageDiv = document.createElement("div");
+    const messageDiv = document.createElement('div');
     // Use explicit Tailwind classes to avoid purge issues
     messageDiv.className = `${colorClass} mb-2 whitespace-pre-wrap font-mono`;
     messageDiv.textContent = `[${timestamp}] ${message}`;
@@ -355,13 +355,13 @@ DB Connections: ${stats.database?.connections || "N/A"}
   /**
    * Get status color class
    */
-  getStatusColor(type) {
+  getStatusColor (type) {
     // Map to explicit Tailwind classes so the JIT scanner picks them up
     const colors = {
-      success: "text-green-400",
-      error: "text-red-400",
-      info: "text-blue-400",
-      warning: "text-yellow-400",
+      success: 'text-green-400',
+      error: 'text-red-400',
+      info: 'text-blue-400',
+      warning: 'text-yellow-400'
     };
     return colors[type] || colors.info;
   },
@@ -369,8 +369,8 @@ DB Connections: ${stats.database?.connections || "N/A"}
   /**
    * Get API token for TokenAuthentication
    */
-  getApiToken() {
-    const panel = document.getElementById("dev-panel");
+  getApiToken () {
+    const panel = document.getElementById('dev-panel');
     if (!panel) return null;
     return panel.dataset.apiToken || null;
   },
@@ -378,65 +378,65 @@ DB Connections: ${stats.database?.connections || "N/A"}
   /**
    * Format ISO timestamp (or null) to a compact human-readable string
    */
-  formatTimestamp(iso) {
-    if (!iso) return "N/A";
+  formatTimestamp (iso) {
+    if (!iso) return 'N/A';
     try {
       const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return "Invalid date";
+      if (Number.isNaN(d.getTime())) return 'Invalid date';
       return d.toLocaleString();
     } catch (e) {
-      return "Invalid date";
+      return 'Invalid date';
     }
   },
 
   /**
    * Make API request with proper session authentication
    */
-  makeRequest(method, url, data, onSuccess, onError) {
-    const csrfToken = this.getCookie("csrftoken");
+  makeRequest (method, url, data, onSuccess, onError) {
+    const csrfToken = this.getCookie('csrftoken');
     const apiToken = this.getApiToken();
 
     const options = {
-      method: method,
+      method,
       headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
       },
-      credentials: "include",
+      credentials: 'include'
     };
 
     if (csrfToken) {
-      options.headers["X-CSRFToken"] = csrfToken;
+      options.headers['X-CSRFToken'] = csrfToken;
     }
     if (apiToken) {
-      options.headers["Authorization"] = `Token ${apiToken}`;
+      options.headers.Authorization = `Token ${apiToken}`;
     }
 
-    if (data && method !== "GET") {
+    if (data && method !== 'GET') {
       options.body = JSON.stringify(data);
     }
 
     fetch(url, options)
       .then((response) => {
-        const contentType = response.headers.get("content-type");
+        const contentType = response.headers.get('content-type');
 
         if (!response.ok) {
           let errorMessage = `HTTP Error ${response.status}`;
 
           if (response.status === 401) {
             errorMessage =
-              "401 Unauthorized. Please ensure you're logged in.";
+              '401 Unauthorized. Please ensure you\'re logged in.';
             const error = new Error(errorMessage);
             error.status = response.status;
             throw error;
           } else if (response.status === 403) {
             errorMessage =
-              "403 Forbidden. Debug endpoints may be restricted to local development.";
+              '403 Forbidden. Debug endpoints may be restricted to local development.';
             const error = new Error(errorMessage);
             error.status = response.status;
             throw error;
           } else if (response.status === 404) {
-            errorMessage = "404 Not Found. Debug API endpoint not found.";
+            errorMessage = '404 Not Found. Debug API endpoint not found.';
             const error = new Error(errorMessage);
             error.status = response.status;
             throw error;
@@ -447,10 +447,10 @@ DB Connections: ${stats.database?.connections || "N/A"}
           throw error;
         }
 
-        if (!contentType || !contentType.includes("application/json")) {
+        if (!contentType || !contentType.includes('application/json')) {
           throw new Error(
-            "Invalid response format. Expected JSON but received " +
-              (contentType || "unknown")
+            'Invalid response format. Expected JSON but received ' +
+              (contentType || 'unknown')
           );
         }
 
@@ -462,7 +462,7 @@ DB Connections: ${stats.database?.connections || "N/A"}
         }
       })
       .catch((error) => {
-        let errorMsg = "Request failed";
+        let errorMsg = 'Request failed';
 
         if (error instanceof TypeError) {
           errorMsg = `Network error: ${error.message}`;
@@ -473,7 +473,7 @@ DB Connections: ${stats.database?.connections || "N/A"}
         if (onError) {
           onError(errorMsg);
         } else {
-          this.showStatus(`Request failed: ${errorMsg}`, "error");
+          this.showStatus(`Request failed: ${errorMsg}`, 'error');
         }
       });
   },
@@ -481,13 +481,13 @@ DB Connections: ${stats.database?.connections || "N/A"}
   /**
    * Get CSRF token from cookies
    */
-  getCookie(name) {
+  getCookie (name) {
     let cookieValue = null;
-    if (document.cookie && document.cookie !== "") {
-      const cookies = document.cookie.split(";");
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
       for (let i = 0; i < cookies.length; i++) {
         const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === name + "=") {
+        if (cookie.substring(0, name.length + 1) === name + '=') {
           cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
           break;
         }
@@ -499,13 +499,13 @@ DB Connections: ${stats.database?.connections || "N/A"}
   /**
    * Go To Management Commands Page
    */
-  goToManagementCommands() {
-    window.location.href = window.location.origin + "/status/commands/";
-  },
+  goToManagementCommands () {
+    window.location.href = window.location.origin + '/status/commands/';
+  }
 };
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => DebugPanel.init());
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => DebugPanel.init());
 } else {
   DebugPanel.init();
 }
