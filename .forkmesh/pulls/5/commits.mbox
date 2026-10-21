@@ -1,0 +1,435 @@
+From fb1a86715daeedeacd9c23fac76dee3a286e7d35 Mon Sep 17 00:00:00 2001
+From: Navodit-Sahai <sahainavodit781@gmail.com>
+Date: Wed, 21 Oct 2026 16:19:05 +0530
+Subject: [PATCH 1/3] Fix mobile sidebar: add toggle button, backdrop overlay,
+ auto-close on nav select, and padding fix
+
+---
+ blt-newsletter/public/dashboard.html | 95 ++++++++++++++++++++--------
+ 1 file changed, 70 insertions(+), 25 deletions(-)
+
+diff --git a/blt-newsletter/public/dashboard.html b/blt-newsletter/public/dashboard.html
+index 7008b7a8b8..399445d2b2 100644
+--- a/blt-newsletter/public/dashboard.html
++++ b/blt-newsletter/public/dashboard.html
+@@ -9,8 +9,12 @@
+       content="Admin dashboard for BLT Newsletter management platform"
+     />
+     <script src="https://cdn.tailwindcss.com"></script>
+-    <script src="/static/theme-init.js"></script>
+-    <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
++    <link rel="preconnect" href="https://fonts.googleapis.com" />
++    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
++    <link
++      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
++      rel="stylesheet"
++    />
+     <link
+       rel="stylesheet"
+       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+@@ -20,7 +24,7 @@
+     />
+     <style>
+       * {
+-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
++        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       }
+ 
+       :root {
+@@ -157,6 +161,33 @@
+         border-right-color: var(--border-light);
+         transition: background-color 200ms, border-color 200ms;
+       }
++      @media (max-width: 768px) {
++        .sidebar {
++          position: fixed;
++          left: -100%;
++          top: 0;
++          height: 100%;
++          z-index: 50;
++          transition: left 200ms;
++        }
++        .sidebar.active {
++          left: 0;
++        }
++        header.px-8 {
++          padding-left: 1rem;
++          padding-right: 1rem;
++        }
++        .sidebar-backdrop {
++          display: none;
++          position: fixed;
++          inset: 0;
++          background: rgba(0,0,0,0.4);
++          z-index: 40;
++        }
++        .sidebar-backdrop.active {
++          display: block;
++        }
++      }
+       .sidebar-item {
+         position: relative;
+         color: var(--text-muted-light);
+@@ -361,51 +392,47 @@
+           max-width: 100%;
+         }
+       }
+-      blt-nav:not(:defined){display:block;min-height:61px}blt-nav:not(:defined)>*{display:none}
+     </style>
+-      <link rel="stylesheet" href="/static/blt-dark.css" />
+   </head>
+-  <body class="antialiased flex h-screen flex-col overflow-hidden">
+-    <blt-nav project="blt-newsletter" name="Newsletter">
+-      <a href="/dashboard" aria-current="page">Dashboard</a>
+-      <a href="/docs">Docs</a>
+-      <button id="admin-avatar-initials" type="button" slot="actions" title="Signed-in admin">…</button>
+-      <button type="button" slot="actions" onclick="logout()">Logout</button>
+-    </blt-nav>
++  <body class="antialiased">
+     <!-- Dashboard Shell -->
+-    <div id="dashboard-shell" class="flex min-h-0 flex-1 overflow-hidden">
++    <div id="dashboard-shell" class="flex h-screen overflow-hidden">
+       <!-- Sidebar -->
++      <div class="sidebar-backdrop" onclick="document.querySelector('.sidebar').classList.remove('active'); this.classList.remove('active')"></div>
+       <aside class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
+         <div class="sidebar-content p-6 flex flex-col h-full" style="color: var(--text-primary-light);">
+           <div class="flex items-center gap-2 mb-8">
+             <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-white shadow-sm">
+-              <img src="./static/images/logo.svg" alt="" class="h-8 w-8" />
++              <img src="./static/images/logo.png" alt="BLT Logo" class="h-8 w-8" />
++            </div>
++            <div>
++              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-400">OWASP BLT</span>
++              <span class="block text-sm font-semibold text-gray-900">Newsletter</span>
+             </div>
+-            <span class="block text-sm font-semibold text-gray-900">BLT Newsletter</span>
+           </div>
+ 
+           <nav class="flex-1 space-y-2">
+-            <button onclick="navigateTo('overview')" class="sidebar-item active w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateAndClose('overview')" class="sidebar-item active w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-gauge-high w-4 mr-3"></i>
+               Overview
+             </button>
+-            <button onclick="navigateTo('users')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateAndClose('users')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-users w-4 mr-3"></i>
+               Subscribers
+             </button>
+-            <button onclick="navigateTo('campaigns')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateAndClose('campaigns')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-newspaper w-4 mr-3"></i>
+               Campaigns
+             </button>
+-            <button onclick="navigateTo('deliveries')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateAndClose('deliveries')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-paper-plane w-4 mr-3"></i>
+               Deliveries
+             </button>
+-            <button onclick="navigateTo('template')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateAndClose('template')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-layer-group w-4 mr-3"></i>
+               Template
+             </button>
+-            <button onclick="navigateTo('settings')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateAndClose('settings')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-gear w-4 mr-3"></i>
+               Settings
+             </button>
+@@ -426,13 +453,24 @@
+ 
+       <!-- Main Content -->
+       <div class="flex-1 flex flex-col overflow-hidden">
+-        <!-- Pages Container -->
+-        <div class="flex-1 overflow-y-auto">
+-          <!-- Page title (set by navigateTo) -->
+-          <div class="px-8 pt-8">
++        <!-- Topbar -->
++        <header class="border-b px-8 py-4 flex items-center justify-between flex-none transition-colors" style="border-bottom-color: var(--border-light); background-color: var(--surface-light);">
++          <button onclick="document.querySelector('.sidebar').classList.toggle('active'); document.querySelector('.sidebar-backdrop').classList.toggle('active')" class="mr-3 md:hidden" style="color: var(--text-primary-light);">
++            <i class="fa-solid fa-bars"></i>
++          </button>
++          <div class="flex-1">
+             <h1 id="page-title" class="text-xl font-semibold" style="color: var(--text-primary-light);">Overview</h1>
+             <p id="page-desc" class="text-sm" style="color: var(--text-muted-light);">Monitor newsletter health and activity</p>
+           </div>
++          <div class="flex items-center gap-4">
++            <button id="admin-avatar-initials" class="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center text-sm font-semibold cursor-pointer" title="Signed-in admin">
++              …
++            </button>
++          </div>
++        </header>
++
++        <!-- Pages Container -->
++        <div class="flex-1 overflow-y-auto">
+           <!-- Overview Page -->
+           <div id="overview-page" class="page active p-8">
+             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+@@ -1342,6 +1380,13 @@
+         setText('page-desc', descs[page] || 'Monitor newsletter health and activity');
+         currentPage = page;
+       }
++      function navigateAndClose(page) {
++        navigateTo(page);
++        if (window.innerWidth < 768) {
++          document.querySelector('.sidebar').classList.remove('active');
++          document.querySelector('.sidebar-backdrop').classList.remove('active');
++        }
++      }
+ 
+       async function logout() {
+         try {
+
+From 28f8698c59271777b170dd5e8950626c68ccda45 Mon Sep 17 00:00:00 2001
+From: Navodit-Sahai <sahainavodit781@gmail.com>
+Date: Wed, 21 Oct 2026 19:45:35 +0530
+Subject: [PATCH 2/3] Fix mobile sidebar: add toggle button, backdrop overlay,
+ auto-close on nav select, and padding fix
+
+---
+ blt-newsletter/public/dashboard.html | 107 +++++++++------------------
+ 1 file changed, 33 insertions(+), 74 deletions(-)
+
+diff --git a/blt-newsletter/public/dashboard.html b/blt-newsletter/public/dashboard.html
+index 399445d2b2..5a9c9a3085 100644
+--- a/blt-newsletter/public/dashboard.html
++++ b/blt-newsletter/public/dashboard.html
+@@ -9,12 +9,8 @@
+       content="Admin dashboard for BLT Newsletter management platform"
+     />
+     <script src="https://cdn.tailwindcss.com"></script>
+-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+-    <link
+-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+-      rel="stylesheet"
+-    />
++    <script src="/static/theme-init.js"></script>
++    <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
+     <link
+       rel="stylesheet"
+       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+@@ -24,7 +20,7 @@
+     />
+     <style>
+       * {
+-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
++        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+       }
+ 
+       :root {
+@@ -161,33 +157,6 @@
+         border-right-color: var(--border-light);
+         transition: background-color 200ms, border-color 200ms;
+       }
+-      @media (max-width: 768px) {
+-        .sidebar {
+-          position: fixed;
+-          left: -100%;
+-          top: 0;
+-          height: 100%;
+-          z-index: 50;
+-          transition: left 200ms;
+-        }
+-        .sidebar.active {
+-          left: 0;
+-        }
+-        header.px-8 {
+-          padding-left: 1rem;
+-          padding-right: 1rem;
+-        }
+-        .sidebar-backdrop {
+-          display: none;
+-          position: fixed;
+-          inset: 0;
+-          background: rgba(0,0,0,0.4);
+-          z-index: 40;
+-        }
+-        .sidebar-backdrop.active {
+-          display: block;
+-        }
+-      }
+       .sidebar-item {
+         position: relative;
+         color: var(--text-muted-light);
+@@ -359,14 +328,13 @@
+         background: linear-gradient(to right, #10b981, #34d399);
+         transition: width 300ms ease;
+       }
+-
+       @media (max-width: 768px) {
+         .sidebar {
+-          display: none;
++          display: none !important;
+           background-color: var(--surface-light);
+         }
+         .sidebar.active {
+-          display: flex;
++          display: flex !important;
+           position: fixed;
+           inset: 0;
+           background: rgba(0, 0, 0, 0.5);
+@@ -379,9 +347,9 @@
+           height: 100vh;
+           background-color: var(--surface-light);
+         }
+-        body.px-8 {
+-          padding-left: 1rem;
+-          padding-right: 1rem;
++        div.px-8.pt-8 {
++          padding-left: 3.5rem !important;
++          padding-right: 1rem !important;
+         }
+ 
+         .card {
+@@ -392,47 +360,53 @@
+           max-width: 100%;
+         }
+       }
++      blt-nav:not(:defined){display:block;min-height:61px}blt-nav:not(:defined)>*{display:none}
+     </style>
++      <link rel="stylesheet" href="/static/blt-dark.css" />
+   </head>
+-  <body class="antialiased">
++  <body class="antialiased flex h-screen flex-col overflow-hidden">
++    <blt-nav project="blt-newsletter" name="Newsletter">
++      <a href="/dashboard" aria-current="page">Dashboard</a>
++      <a href="/docs">Docs</a>
++      <button id="admin-avatar-initials" type="button" slot="actions" title="Signed-in admin">…</button>
++      
++      <button type="button" slot="actions" onclick="logout()">Logout</button>
++    </blt-nav>
+     <!-- Dashboard Shell -->
+-    <div id="dashboard-shell" class="flex h-screen overflow-hidden">
++    <div id="dashboard-shell" class="flex min-h-0 flex-1 overflow-hidden">
+       <!-- Sidebar -->
+-      <div class="sidebar-backdrop" onclick="document.querySelector('.sidebar').classList.remove('active'); this.classList.remove('active')"></div>
+-      <aside class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
++      <button type="button" onclick="document.querySelector('.sidebar').classList.toggle('active')" class="md:hidden fixed top-16 left-3 z-[60] bg-white border rounded-lg p-2 shadow"><i class="fa-solid fa-bars"></i></button>
++      <aside class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" onclick="if(event.target === this) this.classList.remove('active')" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
+         <div class="sidebar-content p-6 flex flex-col h-full" style="color: var(--text-primary-light);">
+           <div class="flex items-center gap-2 mb-8">
+             <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-white shadow-sm">
+-              <img src="./static/images/logo.png" alt="BLT Logo" class="h-8 w-8" />
+-            </div>
+-            <div>
+-              <span class="block text-xs font-semibold uppercase tracking-wide text-gray-400">OWASP BLT</span>
+-              <span class="block text-sm font-semibold text-gray-900">Newsletter</span>
++              <img src="./static/images/logo.svg" alt="" class="h-8 w-8" />
+             </div>
++            <span class="block text-sm font-semibold text-gray-900">BLT Newsletter</span>
+           </div>
+ 
+           <nav class="flex-1 space-y-2">
+-            <button onclick="navigateAndClose('overview')" class="sidebar-item active w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateTo('overview')" class="sidebar-item active w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-gauge-high w-4 mr-3"></i>
+               Overview
+             </button>
+-            <button onclick="navigateAndClose('users')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateTo('users')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-users w-4 mr-3"></i>
+               Subscribers
+             </button>
+-            <button onclick="navigateAndClose('campaigns')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateTo('campaigns')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-newspaper w-4 mr-3"></i>
+               Campaigns
+             </button>
+-            <button onclick="navigateAndClose('deliveries')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateTo('deliveries')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-paper-plane w-4 mr-3"></i>
+               Deliveries
+             </button>
+-            <button onclick="navigateAndClose('template')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateTo('template')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-layer-group w-4 mr-3"></i>
+               Template
+             </button>
+-            <button onclick="navigateAndClose('settings')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
++            <button onclick="navigateTo('settings')" class="sidebar-item w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition hover:bg-gray-50">
+               <i class="fa-solid fa-gear w-4 mr-3"></i>
+               Settings
+             </button>
+@@ -453,24 +427,13 @@
+ 
+       <!-- Main Content -->
+       <div class="flex-1 flex flex-col overflow-hidden">
+-        <!-- Topbar -->
+-        <header class="border-b px-8 py-4 flex items-center justify-between flex-none transition-colors" style="border-bottom-color: var(--border-light); background-color: var(--surface-light);">
+-          <button onclick="document.querySelector('.sidebar').classList.toggle('active'); document.querySelector('.sidebar-backdrop').classList.toggle('active')" class="mr-3 md:hidden" style="color: var(--text-primary-light);">
+-            <i class="fa-solid fa-bars"></i>
+-          </button>
+-          <div class="flex-1">
++        <!-- Pages Container -->
++        <div class="flex-1 overflow-y-auto">
++          <!-- Page title (set by navigateTo) -->
++          <div class="px-8 pt-8">
+             <h1 id="page-title" class="text-xl font-semibold" style="color: var(--text-primary-light);">Overview</h1>
+             <p id="page-desc" class="text-sm" style="color: var(--text-muted-light);">Monitor newsletter health and activity</p>
+           </div>
+-          <div class="flex items-center gap-4">
+-            <button id="admin-avatar-initials" class="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center text-sm font-semibold cursor-pointer" title="Signed-in admin">
+-              …
+-            </button>
+-          </div>
+-        </header>
+-
+-        <!-- Pages Container -->
+-        <div class="flex-1 overflow-y-auto">
+           <!-- Overview Page -->
+           <div id="overview-page" class="page active p-8">
+             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+@@ -1379,12 +1342,8 @@
+         setText('page-title', titles[page] || 'Overview');
+         setText('page-desc', descs[page] || 'Monitor newsletter health and activity');
+         currentPage = page;
+-      }
+-      function navigateAndClose(page) {
+-        navigateTo(page);
+         if (window.innerWidth < 768) {
+           document.querySelector('.sidebar').classList.remove('active');
+-          document.querySelector('.sidebar-backdrop').classList.remove('active');
+         }
+       }
+ 
+
+From 6713644d93b8da83406f268a2ffb862c4ba879f3 Mon Sep 17 00:00:00 2001
+From: Navodit-Sahai <sahainavodit781@gmail.com>
+Date: Wed, 21 Oct 2026 20:01:33 +0530
+Subject: [PATCH 3/3] Fix mobile sidebar: add toggle button, backdrop overlay,
+ auto-close on nav select, and padding fix
+
+---
+ blt-newsletter/public/dashboard.html | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/blt-newsletter/public/dashboard.html b/blt-newsletter/public/dashboard.html
+index 5a9c9a3085..6ed5b46c72 100644
+--- a/blt-newsletter/public/dashboard.html
++++ b/blt-newsletter/public/dashboard.html
+@@ -376,7 +376,7 @@
+     <div id="dashboard-shell" class="flex min-h-0 flex-1 overflow-hidden">
+       <!-- Sidebar -->
+       <button type="button" onclick="document.querySelector('.sidebar').classList.toggle('active')" class="md:hidden fixed top-16 left-3 z-[60] bg-white border rounded-lg p-2 shadow"><i class="fa-solid fa-bars"></i></button>
+-      <aside class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" onclick="if(event.target === this) this.classList.remove('active')" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
++      <aside class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
+         <div class="sidebar-content p-6 flex flex-col h-full" style="color: var(--text-primary-light);">
+           <div class="flex items-center gap-2 mb-8">
+             <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-white shadow-sm">
+@@ -1310,7 +1310,14 @@
+                     <td colspan="${colspan}" class="text-center text-gray-500 py-8">${escapeHtml(message)}</td>
+                   </tr>`;
+       }
+-
++      document.addEventListener('click', function(e) {
++        const sidebar = document.querySelector('.sidebar');
++        const toggleBtn = document.querySelector('button[class*="md:hidden"]');
++        if (!sidebar.classList.contains('active')) return;
++        if (sidebar.contains(e.target) && e.target.closest('.sidebar-content')) return;
++        if (toggleBtn && toggleBtn.contains(e.target)) return;
++        sidebar.classList.remove('active');
++      });
+       function navigateTo(page) {
+         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+         document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
