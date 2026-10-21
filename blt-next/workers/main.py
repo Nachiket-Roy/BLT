@@ -1,4 +1,4 @@
-from js import Response, Headers, URL, fetch
+from js import Response, Headers, URL
 import json
 import hashlib
 from html import escape as html_escape
@@ -17,7 +17,6 @@ ALLOWED_ORIGINS = [
     'http://localhost:8000',
 ]
 
-DEFAULT_BLT_API_URL = 'https://api.owaspblt.org'
 LEADERBOARD_PAGE_SIZE = 100
 
 FRONTEND_SECURITY_HEADERS = {
@@ -679,11 +678,9 @@ async def fetch_leaderboard(env):
 
     Returns (entries, total). Raises on a network or non-2xx failure.
     """
-    base = getattr(env, 'BLT_API_URL', None) or DEFAULT_BLT_API_URL
-    api_response = await fetch(f"{base.rstrip('/')}/leaderboard?per_page={LEADERBOARD_PAGE_SIZE}")
-    if not api_response.ok:
-        raise RuntimeError(f"BLT-API returned {api_response.status}")
-    payload = (await api_response.json()).to_py()
+    status, payload = await call_blt_api(env, 'GET', f'/leaderboard?per_page={LEADERBOARD_PAGE_SIZE}')
+    if status != 200 or not isinstance(payload, dict):
+        raise RuntimeError(f"BLT-API returned {status}")
     entries = payload.get('data') or []
     total = (payload.get('pagination') or {}).get('total', len(entries))
     return entries, total
