@@ -1,0 +1,2264 @@
+From 3b5ec102e6d59c20c3686f6147ccaf88ae30572f Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Tue, 20 Oct 2026 20:26:10 -0400
+Subject: [PATCH 1/2] blt-action owns /assign; blt-pool drops its copy and its
+ GitHub sweep
+
+Issue #38: BLT-Action and BLT-Pool both had /assign. BLT-Action (forge workflow
+blt-action--assign.yml) is now the only one.
+
+blt-pool (blt-github-app Worker):
+- /assign and /unassign are ignored (no reaction, no reply). /approve still
+  assigns the last person who commented /assign.
+- Removed _assign, _unassign, the 2-hourly _run_scheduled sweep
+  (_check_stale_assignments, _check_stale_mentor_assignments) and the helpers
+  only it used. It walked every GitHub App installation and polled the frozen
+  OWASP-BLT/* GitHub repositories. on_scheduled now runs only the
+  forge-leaderboard task; any other call logs and returns.
+
+blt-cron: dropped the "blt-pool" 0 */2 job. The blt-pool-leaderboard task stays.
+
+blt-action: ported the stale-assignment release that BLT-Pool and the old
+GitHub Action had (docs said "Nothing unassigns stale issues automatically").
+forge/stale.mjs runs daily (.forkmesh/blt-action--unassign-stale.yml, 05:53
+UTC, job API only, no commit). For self-claims only (/assign or the web claim
+button; never a maintainer's assignment), with no pull request in the forge
+pulls ledger and no comment from the assignee for 6 days, it posts one warning.
+At 7 days, once the warning is at least 20 hours old, it unassigns and says
+so. A comment from the assignee restarts the clock. If the pulls ledger can't
+be read, the run changes nothing. The /assign reply now mentions this.
+
+Tests: forge/stale.test.mjs (10), the pool comment-routing and on_scheduled
+tests, and the blt-cron job list.
+
+Fixes #38
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .forkmesh/blt-action--unassign-stale.yml |  21 ++
+ blt-action/forge/assign.mjs              |   2 +
+ blt-action/forge/stale.mjs               | 269 ++++++++++++++
+ blt-action/forge/stale.test.mjs          | 215 +++++++++++
+ blt-cron/README.md                       |   2 +-
+ blt-cron/src/jobs.js                     |   4 +-
+ blt-cron/test/cron.test.js               |   7 +-
+ blt-pool/ARCHITECTURE.md                 |  16 +-
+ blt-pool/README.md                       |   5 +-
+ blt-pool/src/index_template.py           |   2 +-
+ blt-pool/src/worker.py                   | 454 +----------------------
+ blt-pool/test_forge_leaderboard.py       |  10 +-
+ blt-pool/test_worker.py                  | 266 ++++---------
+ docs/workflows.md                        |  28 +-
+ 14 files changed, 646 insertions(+), 655 deletions(-)
+ create mode 100644 .forkmesh/blt-action--unassign-stale.yml
+ create mode 100644 blt-action/forge/stale.mjs
+ create mode 100644 blt-action/forge/stale.test.mjs
+
+diff --git a/.forkmesh/blt-action--unassign-stale.yml b/.forkmesh/blt-action--unassign-stale.yml
+new file mode 100644
+index 0000000000..70593f8845
+--- /dev/null
++++ b/.forkmesh/blt-action--unassign-stale.yml
+@@ -0,0 +1,21 @@
++name: "blt-action: release stale /assign claims"
++# Forge port of the stale-assignment unassign that BLT-Action (blt-action/src/index.js) and BLT-Pool's
++# 2-hourly GitHub sweep used to do (issue #38: /assign belongs to BLT-Action alone). Once a day,
++# blt-action/forge/stale.mjs reads the open issues' ledger in this checkout and the forge's pull
++# request ledger (anonymous GETs), then, through the job API:
++# - warns an assignee who claimed an issue (by /assign or the web claim) and has had no pull
++#   request and no comment on it for 6 days;
++# - unassigns them at 7 days, once the warning is at least 20 hours old, and says so.
++# Assignments a maintainer made for someone else are never released. Nothing is committed.
++# Rules: docs/workflows.md ("Stale claims"). Preview with: node blt-action/forge/stale.mjs --dry-run
++on:
++  schedule:
++    - cron: "53 5 * * *"
++  workflow_dispatch:
++jobs:
++  unassign-stale:
++    runs-on: runner
++    timeout-minutes: 5
++    steps:
++      - name: Warn, then release stale claims
++        run: node blt-action/forge/stale.mjs
+diff --git a/blt-action/forge/assign.mjs b/blt-action/forge/assign.mjs
+index 6981e8db31..53f5bc2cfc 100644
+--- a/blt-action/forge/assign.mjs
++++ b/blt-action/forge/assign.mjs
+@@ -31,6 +31,7 @@ export const REPO_KEY = "owasp-blt/blt"; // forkmesh-issue-event-v2 signing key:
+ // BLT-Action blocks a new assignment while the user holds another open issue without an open pull
+ // request, i.e. one unfinished issue at a time.
+ export const MAX_OPEN_ASSIGNMENTS = 1;
++// Also the stale-claim window of blt-action/forge/stale.mjs.
+ export const PR_DAYS = 7;
+ export const MAX_COMMANDS_PER_RUN = 10;
+ // Spam guards. One refusal reply per person per day: further refused /assign comments get no reply.
+@@ -232,6 +233,7 @@ export function decide({ command, name, issue, others = [] }) {
+       change: { assignees: [name] },
+       reply:
+         `${who} you're assigned to this issue. Please open a pull request for it within ${PR_DAYS} days. ` +
++        `Without a pull request or an update from you here for ${PR_DAYS} days, you'll be unassigned (after a warning). ` +
+         `If you stop working on it, comment \`/unassign\` so someone else can pick it up.`,
+     };
+   }
+diff --git a/blt-action/forge/stale.mjs b/blt-action/forge/stale.mjs
+new file mode 100644
+index 0000000000..f6339607b0
+--- /dev/null
++++ b/blt-action/forge/stale.mjs
+@@ -0,0 +1,269 @@
++// Releases stale `/assign` claims on BLT forge issues (git.owaspblt.org/BLT). Run daily by
++// .forkmesh/blt-action--unassign-stale.yml. This is the forge port of the stale-assignment
++// unassign that BLT-Action (blt-action/src/index.js) and BLT-Pool's 2-hourly GitHub sweep did; BLT-Pool
++// no longer handles /assign at all (issue #38).
++//
++//   node blt-action/forge/stale.mjs              warn, then unassign, through the job API
++//   node blt-action/forge/stale.mjs --dry-run    print what would happen; change nothing
++//
++// A claim is stale when the assignee has been quiet on the issue for STALE_DAYS (the clock starts at
++// the claim and restarts with each verified comment the assignee posts there) and has no open pull
++// request, nor one opened since the claim. A day before that, the assignee gets one warning comment;
++// the claim is released only once that warning is WARN_GRACE_MS old. Only self-claims are released:
++// `/assign` (claims recorded by the -actions bot or blt-tasks[bot]) and the web "claim" button. An
++// assignment a maintainer made for someone else is left alone.
++//
++// Pull requests are read anonymously from the forge's `forkmesh/pulls` ledger branch (no ledger yet
++// means no pull requests). If the ledger can't be read, the run stops without changing anything.
++import { existsSync, readdirSync } from "node:fs";
++import { join } from "node:path";
++import * as forge from "../../scripts/actions/forge.mjs";
++import { PR_DAYS, isBot, ledgerComments, loadIssue, isOpen, accountName, mention } from "./assign.mjs";
++
++export const DAY_MS = 24 * 60 * 60 * 1000;
++export const STALE_DAYS = PR_DAYS;
++export const WARN_DAYS = STALE_DAYS - 1;
++// The run is daily, so a warning is about a day old at the next run; allow for a late runner.
++export const WARN_GRACE_MS = 20 * 60 * 60 * 1000;
++export const MAX_ACTIONS_PER_RUN = 10;
++export const FORGE_URL = "https://git.owaspblt.org";
++export const FORGE_REPO = "owasp-blt/BLT";
++export const PULL_LEDGER = "forkmesh/pulls";
++const BLOB_BATCH = 50;
++
++const sameName = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
++const toMs = (ts) => {
++  const n = Number(ts || 0);
++  return n > 1e12 ? n : n * 1000;
++};
++
++export const warningMarker = (name, since) => `<!-- blt-assign-stale-warning:${String(name).toLowerCase()}:${since} -->`;
++export const releaseMarker = (name, since) => `<!-- blt-assign-stale:${String(name).toLowerCase()}:${since} -->`;
++
++// ---- ledger -------------------------------------------------------------------------------------
++
++/**
++ * The event that gave `name` the issue, newest first: a `claim` (claimState "assigned") or a signed
++ * `assignees` event listing them. Returns {ts, by, self} or null when the ledger doesn't say.
++ */
++export function assignment(record, name) {
++  const events = (Array.isArray(record.events) ? record.events : []).slice().sort((a, b) => toMs(b?.ts) - toMs(a?.ts));
++  for (const e of events) {
++    if (e?.type === "claim" && sameName(e.assignee, name)) {
++      if (String(e.claimState || "assigned") !== "assigned") return null; // released later, re-added another way
++      const by = String(e.authorName || "");
++      const self = (e.authorVerified === true && sameName(by, name)) || isBot(by);
++      return { ts: toMs(e.ts), by, self };
++    }
++    if (e?.type === "assignees" && Array.isArray(e.assignees)) {
++      if (!e.assignees.some((a) => sameName(a, name))) continue;
++      const by = String(e.authorName || "");
++      return { ts: toMs(e.ts), by, self: isBot(by) || String(e.id || "").startsWith("blt-assign-") };
++    }
++  }
++  return null;
++}
++
++/** Newest verified comment `name` posted on the issue (ms), 0 if none. */
++export function lastActivity(record, name) {
++  let last = 0;
++  for (const c of ledgerComments(record)) {
++    if (c.authorVerified === true && sameName(c.authorName, name)) last = Math.max(last, toMs(c.ts));
++  }
++  return last;
++}
++
++/** When the stale warning for this claim period was posted by the -actions bot (ms), 0 if never. */
++export function warnedAt(record, name, since) {
++  const marker = warningMarker(name, since);
++  let at = 0;
++  for (const c of ledgerComments(record)) {
++    if (c.authorVerified === true && isBot(c.authorName) && String(c.body || "").includes(marker)) at = Math.max(at, toMs(c.ts));
++  }
++  return at;
++}
++
++// ---- pull requests ------------------------------------------------------------------------------
++
++export function parseFrontMatter(text) {
++  const lines = String(text ?? "").split("\n");
++  if (!lines.length || lines[0].trim() !== "---") return {};
++  const values = {};
++  for (const line of lines.slice(1)) {
++    if (line.trim() === "---") return values;
++    const i = line.indexOf(":");
++    if (i > 0) values[line.slice(0, i).trim()] = line.slice(i + 1).trim();
++  }
++  return {};
++}
++
++function blobText(blob) {
++  if (blob == null) return null;
++  if (typeof blob === "string") return blob;
++  const content = blob.content ?? blob.text ?? "";
++  return blob.encoding === "base64" ? Buffer.from(content, "base64").toString("utf8") : content;
++}
++
++/**
++ * Every pull request in the forge ledger as [{number, author, status, opened}]. `getJson(url)` returns
++ * {status, data}. A 404 for the ledger means no pull requests yet; any other failure throws.
++ */
++export async function readPulls(getJson, { url = FORGE_URL, repo = FORGE_REPO } = {}) {
++  const api = `${url.replace(/\/+$/, "")}/api/repo/${repo}`;
++  const get = async (op, params) => {
++    const query = new URLSearchParams(params).toString();
++    const { status, data } = await getJson(`${api}/${op}?${query}`);
++    if (status === 404) return null;
++    if (status >= 400 || !data || typeof data !== "object") throw new Error(`forge ${op} answered ${status}`);
++    return data;
++  };
++  const tree = await get("tree", [["path", ".forkmesh/pulls"], ["ref", PULL_LEDGER]]);
++  if (!tree) return [];
++  const numbers = (tree.entries || []).filter((e) => e?.type === "tree" && /^\d+$/.test(String(e.name))).map((e) => String(e.name));
++  const pulls = [];
++  for (let i = 0; i < numbers.length; i += BLOB_BATCH) {
++    const chunk = numbers.slice(i, i + BLOB_BATCH);
++    const paths = chunk.map((n) => `.forkmesh/pulls/${n}/pull.md`);
++    const data = await get("blobs", [...paths.map((p) => ["path", p]), ["ref", PULL_LEDGER]]);
++    const blobs = data?.blobs || {};
++    chunk.forEach((n, j) => {
++      const meta = parseFrontMatter(blobText(blobs[paths[j]]));
++      if (!meta.authorName) return;
++      pulls.push({
++        number: Number(n),
++        author: meta.authorName,
++        status: String(meta.status || "open").toLowerCase(),
++        opened: toMs(Number(meta.ts) || Date.parse(meta.ts) || 0),
++      });
++    });
++  }
++  return pulls;
++}
++
++/** True when `name` has an open pull request, or opened one at or after `since`. */
++export function hasPull(pulls, name, since) {
++  return pulls.some((p) => sameName(p.author, name) && (p.status === "open" || p.opened >= since));
++}
++
++// ---- rules --------------------------------------------------------------------------------------
++
++/**
++ * What to do for each assignee of the open issues under `root`: [{number, name, action, reply, since}]
++ * where action is "warn" or "unassign". Assignees who are fine produce nothing.
++ */
++export function plan({ root, numbers, pulls, now = Date.now(), log = () => {} }) {
++  const actions = [];
++  for (const number of numbers) {
++    const issue = loadIssue(root, number);
++    if (!issue || !isOpen(issue)) continue;
++    for (const assignee of issue.record.assignees || []) {
++      const name = accountName(assignee);
++      const label = `#${number} @${assignee}`;
++      if (!name) {
++        log(`${label}: not an account name, skipped`);
++        continue;
++      }
++      const claim = assignment(issue.record, name);
++      if (!claim) {
++        log(`${label}: no claim event in the ledger, skipped`);
++        continue;
++      }
++      if (!claim.self) {
++        log(`${label}: assigned by ${claim.by || "someone else"}, left alone`);
++        continue;
++      }
++      if (hasPull(pulls, name, claim.ts)) {
++        log(`${label}: has a pull request, fine`);
++        continue;
++      }
++      const since = Math.max(claim.ts, lastActivity(issue.record, name));
++      const idle = now - since;
++      if (idle < WARN_DAYS * DAY_MS) continue;
++      const warned = warnedAt(issue.record, name, since);
++      if (!warned) {
++        actions.push({
++          number,
++          name,
++          since,
++          action: "warn",
++          reply:
++            `${mention(name)} there's been no pull request or comment from you here for ${WARN_DAYS} days. ` +
++            `If you're still working on this issue, please comment with an update or open a pull request; ` +
++            `otherwise you'll be unassigned in about a day so someone else can pick it up. ${warningMarker(name, since)}`,
++        });
++        continue;
++      }
++      if (idle >= STALE_DAYS * DAY_MS && now - warned >= WARN_GRACE_MS) {
++        actions.push({
++          number,
++          name,
++          since,
++          action: "unassign",
++          reply:
++            `${mention(name)} you've been unassigned from this issue because there was no pull request or update ` +
++            `for ${STALE_DAYS} days. It's open for others now; comment \`/assign\` to take it again. ${releaseMarker(name, since)}`,
++        });
++      }
++    }
++  }
++  return actions;
++}
++
++export function openIssueNumbers(root) {
++  const dir = join(root, ".forkmesh", "issues", "open");
++  if (!existsSync(dir)) return [];
++  return readdirSync(dir).filter((n) => /^\d+$/.test(n)).map(Number).sort((a, b) => a - b);
++}
++
++/** Carry out the plan through the job API. Returns the actions taken. */
++export async function execute(actions, { client, log = console.log, max = MAX_ACTIONS_PER_RUN }) {
++  const done = [];
++  for (const a of actions.slice(0, max)) {
++    if (a.action === "unassign") {
++      try {
++        await client.changeAssignees(a.number, { remove: [a.name] });
++      } catch (error) {
++        if (client.missingEndpoint?.(error)) {
++          log("the job API has no assignees endpoint; stopping (no ledger fallback for stale releases)");
++          return done;
++        }
++        throw error;
++      }
++    }
++    await client.comment(a.number, a.reply);
++    log(`#${a.number} @${a.name}: ${a.action}`);
++    done.push(a);
++  }
++  if (actions.length > max) log(`${actions.length - max} more left for the next run`);
++  return done;
++}
++
++async function fetchJson(url) {
++  const response = await fetch(url, { headers: { Accept: "application/json" } });
++  let data = null;
++  try {
++    data = await response.json();
++  } catch {
++    data = null;
++  }
++  return { status: response.status, data };
++}
++
++async function main() {
++  const root = forge.ROOT;
++  const dryRun = process.argv.includes("--dry-run");
++  const pulls = await readPulls(fetchJson, { url: process.env.BLT_FORGE_URL || FORGE_URL });
++  console.log(`${pulls.length} pull requests in the forge ledger`);
++  const actions = plan({ root, numbers: openIssueNumbers(root), pulls, log: console.log });
++  if (!actions.length) {
++    console.log("no stale assignments");
++    return;
++  }
++  if (dryRun) {
++    for (const a of actions) console.log(`would ${a.action} @${a.name} on #${a.number}: ${a.reply}`);
++    return;
++  }
++  await execute(actions, { client: forge });
++}
++
++if (import.meta.url === `file://${process.argv[1]}`) forge.run(main);
+diff --git a/blt-action/forge/stale.test.mjs b/blt-action/forge/stale.test.mjs
+new file mode 100644
+index 0000000000..ca416f0b1c
+--- /dev/null
++++ b/blt-action/forge/stale.test.mjs
+@@ -0,0 +1,215 @@
++// node --test blt-action/forge/
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import * as S from "./stale.mjs";
++
++const DAY = S.DAY_MS;
++const T0 = Date.parse("2026-10-01T12:00:00Z");
++const quiet = () => {};
++
++const claim = (assignee, by, ts, extra = {}) => ({
++  assignee,
++  author: `key-${by}`,
++  authorName: by,
++  authorVerified: true,
++  claimState: "assigned",
++  id: `claim-${by}-${ts}`,
++  sig: "s",
++  ts,
++  type: "claim",
++  ...extra,
++});
++const comment = (login, body, ts, verified = true) => ({
++  attachments: [],
++  author: `key-${login}`,
++  authorName: login,
++  authorVerified: verified,
++  body,
++  id: `c-${login}-${ts}`,
++  sig: "s",
++  ts,
++  type: "comment",
++});
++
++function record(number, { assignees = [], events = [], status = "open" } = {}) {
++  return {
++    assignees,
++    author: "x",
++    authorName: "someone",
++    events: [{ attachments: [], author: "x", body: "b", id: `open-${number}`, sig: "s", title: "t", ts: 1, type: "open" }, ...events],
++    labels: [],
++    number,
++    schema: "forkmesh-issue-v1",
++    status,
++    title: "t",
++    updatedAt: 100,
++  };
++}
++
++function ledger(issues) {
++  const root = mkdtempSync(join(tmpdir(), "stale-"));
++  for (const [number, rec, side = "open"] of issues) {
++    const dir = join(root, ".forkmesh", "issues", side, String(number));
++    mkdirSync(dir, { recursive: true });
++    writeFileSync(join(dir, `issue-${number}.json`), `${JSON.stringify(rec, null, 4)}\n`);
++  }
++  return root;
++}
++
++const run = (root, now, pulls = []) =>
++  S.plan({ root, numbers: S.openIssueNumbers(root), pulls, now, log: quiet }).map((a) => `${a.action} #${a.number} @${a.name}`);
++
++test("a quiet /assign claim is warned after 6 days and released a day after the warning", () => {
++  const rec = record(5, { assignees: ["alice"], events: [claim("alice", "owasp-blt-actions", T0)] });
++  const root = ledger([[5, rec]]);
++  assert.deepEqual(run(root, T0 + 5 * DAY), []);
++  const [warn] = S.plan({ root, numbers: [5], pulls: [], now: T0 + 6 * DAY, log: quiet });
++  assert.equal(warn.action, "warn");
++  assert.match(warn.reply, /^@alice /);
++  assert.ok(warn.reply.includes(S.warningMarker("alice", T0)));
++
++  // The warning reaches the ledger as a comment from the -actions bot.
++  rec.events.push(comment("owasp-blt-actions", warn.reply, T0 + 6 * DAY + 1000));
++  const root2 = ledger([[5, rec]]);
++  assert.deepEqual(run(root2, T0 + 6.5 * DAY), [], "warned, not stale yet");
++  const [release] = S.plan({ root: root2, numbers: [5], pulls: [], now: T0 + 7 * DAY + 1000, log: quiet });
++  assert.equal(release.action, "unassign");
++  assert.match(release.reply, /^@alice you've been unassigned/);
++  assert.ok(release.reply.includes("`/assign`"));
++});
++
++test("a late warning still gets its grace period", () => {
++  const rec = record(5, {
++    assignees: ["alice"],
++    events: [claim("alice", "alice", T0), comment("owasp-blt-actions", `@alice ${S.warningMarker("alice", T0)}`, T0 + 9 * DAY)],
++  });
++  const root = ledger([[5, rec]]);
++  assert.deepEqual(run(root, T0 + 9 * DAY + S.WARN_GRACE_MS - 1), [], "stale for days, but warned too recently");
++  assert.deepEqual(run(root, T0 + 9 * DAY + S.WARN_GRACE_MS), ["unassign #5 @alice"]);
++});
++
++test("a comment by the assignee restarts the clock and needs a new warning", () => {
++  const warned = S.warningMarker("alice", T0);
++  const rec = record(5, {
++    assignees: ["alice"],
++    events: [
++      claim("alice", "alice", T0),
++      comment("owasp-blt-actions", `@alice ... ${warned}`, T0 + 6 * DAY),
++      comment("alice", "still on it", T0 + 6.5 * DAY),
++    ],
++  });
++  const root = ledger([[5, rec]]);
++  assert.deepEqual(run(root, T0 + 8 * DAY), [], "1.5 days since alice's update");
++  assert.deepEqual(run(root, T0 + 12.6 * DAY), ["warn #5 @alice"]);
++});
++
++test("comments that don't count: unverified, and a fake warning from a person", () => {
++  const rec = record(5, {
++    assignees: ["alice"],
++    events: [
++      claim("alice", "alice", T0),
++      comment("alice", "unverified update", T0 + 5 * DAY, false),
++      comment("mallory", `nope ${S.warningMarker("alice", T0)}`, T0 + 6 * DAY),
++    ],
++  });
++  const root = ledger([[5, rec]]);
++  assert.deepEqual(run(root, T0 + 9 * DAY), ["warn #5 @alice"], "the unverified comment and mallory's marker are ignored");
++});
++
++test("an open pull request, or one opened since the claim, keeps the claim", () => {
++  const rec = record(5, { assignees: ["alice"], events: [claim("alice", "owasp-blt-actions", T0)] });
++  const root = ledger([[5, rec]]);
++  const now = T0 + 10 * DAY;
++  assert.deepEqual(run(root, now, [{ number: 1, author: "Alice", status: "open", opened: T0 - 30 * DAY }]), []);
++  assert.deepEqual(run(root, now, [{ number: 2, author: "alice", status: "merged", opened: T0 + DAY }]), []);
++  assert.deepEqual(run(root, now, [{ number: 3, author: "alice", status: "closed", opened: T0 - DAY }]), ["warn #5 @alice"]);
++  assert.deepEqual(run(root, now, [{ number: 4, author: "bob", status: "open", opened: T0 + DAY }]), ["warn #5 @alice"]);
++});
++
++test("only self-claims are released: a maintainer's assignment is left alone", () => {
++  const root = ledger([
++    [5, record(5, { assignees: ["alice"], events: [claim("alice", "donnieblt", T0)] })],
++    [6, record(6, { assignees: ["bob"], events: [] })],
++    [7, record(7, { assignees: ["carol"], events: [{ id: "blt-assign-abc", type: "assignees", assignees: ["carol"], authorName: "blt-tasks[bot]", ts: T0 }] })],
++    [8, record(8, { assignees: ["dave"], events: [claim("dave", "dave", T0)] }), "closed"],
++    [9, record(9, { assignees: ["erin"], events: [claim("erin", "erin", T0, { authorVerified: false })] })],
++  ]);
++  assert.deepEqual(run(root, T0 + 30 * DAY), ["warn #7 @carol"]);
++});
++
++test("the newest claim wins: a claim released and re-made later restarts the clock", () => {
++  const rec = record(5, {
++    assignees: ["alice"],
++    events: [claim("alice", "alice", T0), claim("alice", "alice", T0 + 5 * DAY)],
++  });
++  assert.equal(S.assignment(rec, "alice").ts, T0 + 5 * DAY);
++  const root = ledger([[5, rec]]);
++  assert.deepEqual(run(root, T0 + 10 * DAY), []);
++  assert.deepEqual(run(root, T0 + 11 * DAY), ["warn #5 @alice"]);
++});
++
++test("readPulls reads pull.md front matter from the forkmesh/pulls ledger", async () => {
++  const urls = [];
++  const getJson = async (url) => {
++    urls.push(url);
++    const u = new URL(url);
++    if (u.pathname.endsWith("/tree")) {
++      return { status: 200, data: { entries: [{ name: "1", type: "tree" }, { name: "2", type: "tree" }, { name: "x", type: "tree" }, { name: "3", type: "blob" }] } };
++    }
++    const blobs = {
++      ".forkmesh/pulls/1/pull.md": "---\ntitle: blt-pool: fix\nstatus: open\nts: 1790000000000\nauthorName: alice\n---\nbody",
++      ".forkmesh/pulls/2/pull.md": { encoding: "base64", content: Buffer.from("---\nstatus: merged\nts: 1790000001000\nauthorName: bob\n---\n").toString("base64") },
++    };
++    return { status: 200, data: { blobs } };
++  };
++  const pulls = await S.readPulls(getJson, { url: "https://forge.test/" });
++  assert.deepEqual(pulls, [
++    { number: 1, author: "alice", status: "open", opened: 1790000000000 },
++    { number: 2, author: "bob", status: "merged", opened: 1790000001000 },
++  ]);
++  assert.match(urls[0], /^https:\/\/forge\.test\/api\/repo\/owasp-blt\/BLT\/tree\?path=.forkmesh%2Fpulls&ref=forkmesh%2Fpulls$/);
++  assert.equal(new URL(urls[1]).searchParams.getAll("path").length, 2);
++});
++
++test("readPulls: no ledger means no pull requests; any other error stops the run", async () => {
++  assert.deepEqual(await S.readPulls(async () => ({ status: 404, data: { error: "not_found" } })), []);
++  await assert.rejects(S.readPulls(async () => ({ status: 502, data: null })), /answered 502/);
++});
++
++test("execute unassigns before replying and stops on an instance without the endpoint", async () => {
++  const calls = [];
++  const client = {
++    changeAssignees: async (n, body) => calls.push(["assignees", n, body]),
++    comment: async (n, body) => calls.push(["comment", n, body]),
++  };
++  const actions = [
++    { number: 5, name: "alice", action: "unassign", reply: "@alice bye" },
++    { number: 6, name: "bob", action: "warn", reply: "@bob heads up" },
++  ];
++  const done = await S.execute(actions, { client, log: quiet });
++  assert.equal(done.length, 2);
++  assert.deepEqual(calls, [
++    ["assignees", 5, { remove: ["alice"] }],
++    ["comment", 5, "@alice bye"],
++    ["comment", 6, "@bob heads up"],
++  ]);
++
++  const missing = Object.assign(new Error("404"), { status: 404, body: { error: "not_found" } });
++  const replies = [];
++  const old = {
++    changeAssignees: async () => {
++      throw missing;
++    },
++    missingEndpoint: (e) => e === missing,
++    comment: async (n, b) => replies.push(b),
++  };
++  assert.deepEqual(await S.execute(actions, { client: old, log: quiet }), []);
++  assert.deepEqual(replies, [], "no reply claims an unassignment that did not happen");
++
++  const many = Array.from({ length: 12 }, (_, i) => ({ number: i, name: "a", action: "warn", reply: "r" }));
++  calls.length = 0;
++  assert.equal((await S.execute(many, { client, log: quiet })).length, S.MAX_ACTIONS_PER_RUN);
++});
+diff --git a/blt-cron/README.md b/blt-cron/README.md
+index 44a08fef11..be553e78cf 100644
+--- a/blt-cron/README.md
++++ b/blt-cron/README.md
+@@ -15,7 +15,7 @@ Some Workers refresh data into Workers KV instead of having a workflow commit it
+ 
+ The GSoC 2026 progress job (`blt-gsoc-progress`, task `progress`) was turned off on 2026-10-18 because GSoC 2026 coding ended on 17 Aug. blt-gsoc still has the `progress` task and its KV data, so the progress page shows the final state; it can be run by hand (see `docs/workflows.md`).
+ 
+-The other rows of `src/jobs.js` replace the cron triggers of blt-github-app (pool), blt-leaf, blt-lettuce, blt-monitor, blt-sizzle, and blt-netguardian. blt-toasty's hourly call was dropped on 2026-10-18 (its scheduled handler is a no-op).
++The other rows of `src/jobs.js` replace the cron triggers of blt-leaf, blt-lettuce, blt-monitor, blt-sizzle, and blt-netguardian. blt-toasty's hourly call was dropped on 2026-10-18 (its scheduled handler is a no-op). blt-github-app's (pool) 2-hourly stale-assignment sweep was dropped on 2026-10-20 (issue #38): it polled the frozen OWASP-BLT/* GitHub repositories, and BLT-Action now releases stale `/assign` claims on git.owaspblt.org.
+ 
+ ## Add a job
+ 
+diff --git a/blt-cron/src/jobs.js b/blt-cron/src/jobs.js
+index d50dfdf89a..f57a932aa5 100644
+--- a/blt-cron/src/jobs.js
++++ b/blt-cron/src/jobs.js
+@@ -5,7 +5,6 @@
+ // those Workers refresh their data in chunks to stay under the free plan's
+ // 50 subrequests per invocation and stop once the day's refresh is done.
+ export const JOBS = [
+-  { name: "blt-pool", binding: "POOL", cron: "0 */2 * * *" },
+   // PR leaderboard: reads the git.owaspblt.org pulls ledger every 20 minutes (:06, :26, :46, a
+   // minute no other job uses). An idle run is 1-2 GETs and 1 D1 read.
+   { name: "blt-pool-leaderboard", binding: "POOL", cron: "6-59/20 * * * *", task: "forge-leaderboard" },
+@@ -28,3 +27,6 @@ export const JOBS = [
+ // blt-gsoc-stats (task "gsoc2026-stats", 02:17-02:31) was removed the same day: it counted activity on
+ // the old OWASP-BLT/* GitHub repos, which are frozen copies now, so its numbers could not change.
+ // /js/gsoc2026_stats.generated.js keeps serving the last stored data.
++// blt-pool (every 2 hours, no task) was removed on 2026-10-20 (issue #38): it swept every GitHub App
++// installation for stale /assign claims on the frozen OWASP-BLT/* GitHub repos. /assign is BLT-Action's
++// alone now (blt-action/forge/), which also releases stale claims on git.owaspblt.org.
+diff --git a/blt-cron/test/cron.test.js b/blt-cron/test/cron.test.js
+index fafddbf3ba..7c8416bf2c 100644
+--- a/blt-cron/test/cron.test.js
++++ b/blt-cron/test/cron.test.js
+@@ -34,7 +34,7 @@ test("cron matching", () => {
+ 
+ test("due jobs at the top of an even hour", () => {
+   const names = dueJobs(Date.parse("2026-10-18T04:00:30Z")).map((j) => j.name).sort();
+-  assert.deepEqual(names, ["blt-leaf", "blt-lettuce", "blt-monitor", "blt-netguardian", "blt-pool", "blt-sizzle"]);
++  assert.deepEqual(names, ["blt-leaf", "blt-lettuce", "blt-monitor", "blt-netguardian", "blt-sizzle"]);
+   const quiet = dueJobs(Date.parse("2026-10-18T04:08:00Z")).map((j) => j.name);
+   assert.deepEqual(quiet, []);
+   assert.ok(!dueJobs(Date.parse("2026-10-18T04:30:00Z")).some((j) => j.name === "blt-lettuce"));
+@@ -66,6 +66,11 @@ test("hackerhouse polls the forge every 5 minutes, off the other jobs' minutes",
+   assert.equal(perDay, 288);
+ });
+ 
++test("blt-pool only runs its forge leaderboard task (no GitHub stale-assignment sweep)", () => {
++  const pool = JOBS.filter((j) => j.binding === "POOL");
++  assert.deepEqual(pool.map((j) => j.task), ["forge-leaderboard"]);
++});
++
+ test("blt-pool reads the forge pulls ledger every 20 minutes on its own minutes", () => {
+   const names = (iso) => dueJobs(Date.parse(iso)).map((j) => j.name);
+   const job = JOBS.find((j) => j.name === "blt-pool-leaderboard");
+diff --git a/blt-pool/ARCHITECTURE.md b/blt-pool/ARCHITECTURE.md
+index ba30fe3cb6..7a66b90383 100644
+--- a/blt-pool/ARCHITECTURE.md
++++ b/blt-pool/ARCHITECTURE.md
+@@ -30,9 +30,9 @@ This is a **GitHub App** built as a **Cloudflare Worker** (Python) that automate
+ ┌─────────────────────────────────────────────────────────────┐
+ │                     Scheduled Tasks                          │
+ │                                                              │
+-│  on_scheduled() → Runs on cron schedule                     │
+-│  - Checks for stale issue assignments                       │
+-│  - Auto-unassigns issues after ASSIGNMENT_DURATION_HOURS    │
++│  on_scheduled() → called by blt-cron (POST /__scheduled)    │
++│  - task "forge-leaderboard": forge pulls → leaderboard      │
++│  - no stale-assignment sweep any more (issue #38)           │
+ └─────────────────────────────────────────────────────────────┘
+ ```
+ 
+@@ -40,7 +40,13 @@ This is a **GitHub App** built as a **Cloudflare Worker** (Python) that automate
+ 
+ ## Feature Breakdown
+ 
+-### Feature 1: Issue Assignment Commands (`/assign` & `/unassign`)
++### Feature 1: Issue Assignment Commands (`/assign` & `/unassign`) — removed
++
++> **Removed (issue #38).** `/assign` and `/unassign` are answered only by BLT-Action on
++> git.owaspblt.org (`blt-action/forge/assign.mjs`), which also releases stale claims
++> (`blt-action/forge/stale.mjs`). This app ignores both commands, and `_assign`, `_unassign`,
++> `_run_scheduled`, `_check_stale_assignments` and `_check_stale_mentor_assignments` are gone. The
++> description below and the scheduled-task flow further down are kept for history only.
+ 
+ **Location**: Lines 1856-1982
+ 
+@@ -448,7 +454,7 @@ For each installation:
+ │  │  • check_unresolved_conversations() → Thread tracking    │ │
+ │  └──────────────────────────────────────────────────────────┘ │
+ │                                                                │
+-│  on_scheduled() ──→ _run_scheduled() ──→ Stale assignments    │
++│  on_scheduled() ──→ forge leaderboard sync (task only)        │
+ └────────┬───────────────────────────────────────────┬──────────┘
+          │                                            │
+          │ API Calls                                  │ Database Queries
+diff --git a/blt-pool/README.md b/blt-pool/README.md
+index 18bfdc1dee..ca7a074705 100644
+--- a/blt-pool/README.md
++++ b/blt-pool/README.md
+@@ -7,9 +7,8 @@ A GitHub App that integrates [OWASP BLT](https://owaspblt.org) services into Git
+ 
+ This repository now serves two connected surfaces:
+ 
+-- **`/assign` command** — Comment `/assign` on any issue to be automatically assigned to it. Assignments expire after 8 hours if no linked PR is submitted.
+-- **`/unassign` command** — Comment `/unassign` to release an issue assignment so others can pick it up.
+-- **Automatic unassignment** — A cron task runs every 2 hours to automatically unassign issues where the 8-hour deadline has passed without a linked pull request. The schedule (`0 */2 * * *`) now runs from the [blt-cron](../blt-cron) dispatcher Worker, which calls `POST /__scheduled` with the shared `CRON_SECRET` (set it with `wrangler secret put CRON_SECRET`); this Worker has no cron trigger of its own.
++- **`/assign` and `/unassign`** — Handled by [BLT-Action](../blt-action) on git.owaspblt.org (`blt-action/forge/assign.mjs`), which also releases stale claims (`blt-action/forge/stale.mjs`). This app ignores both commands, and its 2-hourly GitHub stale-assignment sweep was removed (issue #38). `/approve` still assigns the last person who commented `/assign`.
++- **Scheduled task** — The only scheduled run is the forge leaderboard sync below: the [blt-cron](../blt-cron) dispatcher Worker calls `POST /__scheduled` with `task: "forge-leaderboard"` and the shared `CRON_SECRET` (set it with `wrangler secret put CRON_SECRET`); this Worker has no cron trigger of its own.
+ - **`/leaderboard` command** — Comment `/leaderboard` on any issue or PR to see your rank in the monthly leaderboard.
+ - **Pull request leaderboard** — [pool.owaspblt.org/leaderboard](https://pool.owaspblt.org/leaderboard) (JSON: `/api/leaderboard?month=YYYY-MM`) ranks contributors per month from D1-backed counters:
+   - Open PRs (+1 each)
+diff --git a/blt-pool/src/index_template.py b/blt-pool/src/index_template.py
+index 154dd1841a..a9a9f5cc35 100644
+--- a/blt-pool/src/index_template.py
++++ b/blt-pool/src/index_template.py
+@@ -148,7 +148,7 @@ GITHUB_PAGE_HTML = """\
+             <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+           </div>
+           <h4 class="text-base font-bold text-blt-dark-base">Issue Claim Commands</h4>
+-          <p class="mt-2 text-sm leading-relaxed text-gray-600">Use <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs">/assign</code> and <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs">/unassign</code> with an 8-hour claim window.</p>
++          <p class="mt-2 text-sm leading-relaxed text-gray-600">Use <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs">/assign</code> and <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs">/unassign</code> on git.owaspblt.org, answered by BLT-Action with a 7-day claim window.</p>
+         </article>
+ 
+         <article class="rounded-2xl border border-blt-border bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+diff --git a/blt-pool/src/worker.py b/blt-pool/src/worker.py
+index 4e01211736..ea0fec1c44 100644
+--- a/blt-pool/src/worker.py
++++ b/blt-pool/src/worker.py
+@@ -59,8 +59,9 @@ UNASSIGN_COMMAND = "/unassign"
+ APPROVE_COMMAND = "/approve"
+ DENY_COMMAND = "/deny"
+ LEADERBOARD_COMMAND = "/leaderboard"
++# Handled by BLT-Action, not by this app (issue #38).
++BLT_ACTION_COMMANDS = frozenset({ASSIGN_COMMAND, UNASSIGN_COMMAND})
+ MAX_ASSIGNEES = 1
+-ASSIGNMENT_DURATION_HOURS = 8
+ BUG_LABELS = {"bug", "vulnerability", "security"}
+ HELP_WANTED_LABEL = "help wanted"
+ TRIAGE_REVIEWER = "donnieblt"
+@@ -79,13 +80,10 @@ MENTOR_ASSIGNED_LABEL = "mentor-assigned"
+ NEEDS_APPROVAL_LABEL = "needs-approval"
+ NEEDS_APPROVAL_LABEL_COLOR = "e11d48"
+ MENTOR_MAX_MENTEES = 3
+-MENTOR_STALE_DAYS = 14
+ MENTOR_LABEL_COLOR = "7057ff"
+ MENTOR_ASSIGNED_LABEL_COLOR = "0075ca"
+ # Issues with these labels bypass mentor auto-assignment (go to core maintainers).
+ SECURITY_BYPASS_LABELS = {"security", "vulnerability", "security-sensitive", "private-security"}
+-# Seconds in a day — used for stale-assignment threshold calculations.
+-_SECONDS_PER_DAY = 86400
+ # TTL for cached GitHub-sourced all-time mentor stats in D1 (24 hours).
+ _MENTOR_STATS_CACHE_TTL = 86400
+ # When True, one active mentor is auto-requested as a reviewer on every newly
+@@ -266,26 +264,6 @@ async def get_installation_token(
+     return data.get("token")
+ 
+ 
+-async def get_installation_access_token(installation_id: int, jwt_token: str) -> Optional[str]:
+-    """Exchange a prebuilt GitHub App JWT for an installation access token."""
+-    resp = await fetch(
+-        f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+-        method="POST",
+-        headers=Headers.new({
+-            "Authorization": f"Bearer {jwt_token}",
+-            "Accept": "application/vnd.github+json",
+-            "Content-Type": "application/json",
+-            "User-Agent": f"BLT-Pool/{APP_VERSION}",
+-            "X-GitHub-Api-Version": "2022-11-28",
+-        }.items()),
+-    )
+-    if resp.status != 201:
+-        console.error(f"[BLT] Failed to get installation access token: {resp.status}")
+-        return None
+-    data = json.loads(await resp.text())
+-    return data.get("token")
+-
+-
+ async def create_comment(
+     owner: str, repo: str, number: int, body: str, token: str
+ ) -> None:
+@@ -3084,39 +3062,6 @@ async def _find_assigned_mentor_from_comments(
+     return last_mentor
+ 
+ 
+-async def _get_last_human_activity_ts(
+-    owner: str, repo: str, issue_number: int, issue: dict, token: str
+-) -> float:
+-    """Return the timestamp (epoch seconds) of the most recent non-bot activity.
+-
+-    Fetches the most recently created page of issue comments and returns the
+-    timestamp of the latest comment posted by a non-bot human.  If no human
+-    comments are found the issue's ``created_at`` value is used as a fallback so
+-    that newly opened issues without any comments are still eligible for stale
+-    checks after ``MENTOR_STALE_DAYS`` days.
+-    """
+-    fallback = _parse_github_timestamp(issue.get("created_at", "")) or 0.0
+-
+-    resp = await github_api(
+-        "GET",
+-        f"/repos/{owner}/{repo}/issues/{issue_number}/comments"
+-        f"?sort=created&direction=desc&per_page=100",
+-        token,
+-    )
+-    if resp.status != 200:
+-        return fallback
+-
+-    comments = json.loads(await resp.text())
+-    for comment in comments:
+-        user = comment.get("user") or {}
+-        if _is_human(user) and not _is_bot(user):
+-            ts = _parse_github_timestamp(comment.get("created_at", ""))
+-            if ts:
+-                return ts
+-
+-    return fallback
+-
+-
+ def _is_security_issue(issue: dict) -> bool:
+     """Return ``True`` if the issue carries any security-sensitive label."""
+     labels = {lb.get("name", "").lower() for lb in issue.get("labels", [])}
+@@ -3585,86 +3530,6 @@ async def handle_mentor_rematch(
+     )
+ 
+ 
+-async def _check_stale_mentor_assignments(owner: str, repo: str, token: str) -> None:
+-    """Unassign mentors from issues that have been inactive for MENTOR_STALE_DAYS days.
+-
+-    Iterates over open issues that carry the ``mentor-assigned`` label.  When the
+-    issue's ``updated_at`` timestamp is older than the stale threshold the mentor is
+-    unassigned, the ``mentor-assigned`` label is removed, and an explanatory comment
+-    is posted.
+-    """
+-    try:
+-        stale_threshold = MENTOR_STALE_DAYS * _SECONDS_PER_DAY
+-        current_time = time.time()
+-        per_page = 100
+-        max_pages = 10  # Conservative limit to avoid excessive subrequests.
+-        page = 1
+-
+-        while page <= max_pages:
+-            resp = await github_api(
+-                "GET",
+-                f"/repos/{owner}/{repo}/issues"
+-                f"?state=open&labels={MENTOR_ASSIGNED_LABEL}&per_page={per_page}&page={page}",
+-                token,
+-            )
+-            if resp.status != 200:
+-                break
+-
+-            issues = json.loads(await resp.text())
+-            if not issues:
+-                break
+-
+-            for issue in issues:
+-                if "pull_request" in issue:
+-                    continue
+-                issue_number = issue["number"]
+-                # Use the last human (non-bot) comment timestamp as the activity
+-                # signal so that bot-posted comments (e.g. mentor assignment
+-                # notices) don't reset the stale clock.
+-                last_human_ts = await _get_last_human_activity_ts(
+-                    owner, repo, issue_number, issue, token
+-                )
+-                if not last_human_ts:
+-                    continue
+-                if current_time - last_human_ts <= stale_threshold:
+-                    continue
+-
+-                # Issue is stale — identify the mentor from the hidden comment marker.
+-                current_mentor = await _find_assigned_mentor_from_comments(
+-                    owner, repo, issue_number, token
+-                )
+-
+-                # Remove the mentor-assigned label.
+-                await github_api(
+-                    "DELETE",
+-                    f"/repos/{owner}/{repo}/issues/{issue_number}/labels/{MENTOR_ASSIGNED_LABEL}",
+-                    token,
+-                )
+-
+-                days_elapsed = int((current_time - last_human_ts) / _SECONDS_PER_DAY)
+-                mentor_mention = f"@{current_mentor} " if current_mentor else ""
+-                await create_comment(
+-                    owner,
+-                    repo,
+-                    issue_number,
+-                    f"{mentor_mention}This issue has had no activity for {days_elapsed} days "
+-                    f"so the mentor assignment has been automatically released. "
+-                    "The issue remains open — use `/mentor` to request a new mentor when work resumes.\n\n"
+-                    "— [OWASP BLT-Pool](https://pool.owaspblt.org)",
+-                    token,
+-                )
+-                console.log(
+-                    f"[MentorPool] Released stale mentor assignment on {owner}/{repo}#{issue_number}"
+-                )
+-
+-            if len(issues) < per_page:
+-                break
+-
+-            page += 1
+-    except Exception as exc:
+-        console.error(f"[MentorPool] Error checking stale mentors in {owner}/{repo}: {exc}")
+-
+-
+ # ---------------------------------------------------------------------------
+ # Event handlers — mirror the Node.js handler logic exactly
+ # ---------------------------------------------------------------------------
+@@ -3708,15 +3573,17 @@ async def handle_issue_comment(payload: dict, token: str, env=None, ctx=None) ->
+             # Fallback for local tests / non-CW runtimes.
+             await _deferred_referral()
+ 
++    # /assign and /unassign belong to BLT-Action (blt-action/forge/assign.mjs on git.owaspblt.org,
++    # issue #38): this app ignores them, so contributors never get two answers. /approve still reads
++    # earlier /assign comments to pick the assignee.
++    if command in BLT_ACTION_COMMANDS:
++        return
++
+     # Add eyes reaction immediately to acknowledge command receipt
+     if comment_id and command:
+         await create_reaction(owner, repo, comment_id, "eyes", token)
+ 
+-    if command == ASSIGN_COMMAND:
+-        await _assign(owner, repo, issue, login, token)
+-    elif command == UNASSIGN_COMMAND:
+-        await _unassign(owner, repo, issue, login, token)
+-    elif command == APPROVE_COMMAND:
++    if command == APPROVE_COMMAND:
+         await _approve(owner, repo, issue, login, token)
+     elif command == DENY_COMMAND:
+         await _deny(owner, repo, issue, login, token)
+@@ -3770,106 +3637,6 @@ async def handle_issue_comment(payload: dict, token: str, env=None, ctx=None) ->
+             await handle_mentor_rematch(owner, repo, issue, login, token, mentors_config, env=env)
+ 
+ 
+-async def _assign(
+-    owner: str, repo: str, issue: dict, login: str, token: str
+-) -> None:
+-    num = issue["number"]
+-    if issue.get("pull_request"):
+-        await create_comment(
+-            owner, repo, num,
+-            f"@{login} This command only works on issues, not pull requests.",
+-            token,
+-        )
+-        return
+-    if issue["state"] == "closed":
+-        await create_comment(
+-            owner, repo, num,
+-            f"@{login} This issue is already closed and cannot be assigned.",
+-            token,
+-        )
+-        return
+-    assignees = [a["login"] for a in issue.get("assignees", [])]
+-    if login in assignees:
+-        await create_comment(
+-            owner, repo, num,
+-            f"@{login} You are already assigned to this issue.",
+-            token,
+-        )
+-        return
+-    if len(assignees) >= MAX_ASSIGNEES:
+-        await create_comment(
+-            owner, repo, num,
+-            f"@{login} This issue already has the maximum number of assignees "
+-            f"({MAX_ASSIGNEES}). Please work on a different issue.",
+-            token,
+-        )
+-        return
+-    label_names = {lb.get("name", "").lower() for lb in issue.get("labels", [])}
+-    if HELP_WANTED_LABEL not in label_names:
+-        await create_comment(
+-            owner, repo, num,
+-            f"@{login} This issue is not yet ready for assignment. "
+-            f"A maintainer (such as @{TRIAGE_REVIEWER}) must first review it and add the "
+-            f'"{HELP_WANTED_LABEL}" label before `/assign` can be used.',
+-            token,
+-        )
+-        await _ensure_label_exists(owner, repo, NEEDS_APPROVAL_LABEL, NEEDS_APPROVAL_LABEL_COLOR, token)
+-        await github_api(
+-            "POST",
+-            f"/repos/{owner}/{repo}/issues/{num}/labels",
+-            token,
+-            {"labels": [NEEDS_APPROVAL_LABEL]},
+-        )
+-        return
+-    await github_api(
+-        "POST",
+-        f"/repos/{owner}/{repo}/issues/{num}/assignees",
+-        token,
+-        {"assignees": [login]},
+-    )
+-    deadline = time.strftime(
+-        "%a, %d %b %Y %H:%M:%S UTC",
+-        time.gmtime(time.time() + ASSIGNMENT_DURATION_HOURS * 3600),
+-    )
+-    await create_comment(
+-        owner, repo, num,
+-        f"@{login} You have been assigned to this issue! 🎉\n\n"
+-        f"Please submit a pull request within **{ASSIGNMENT_DURATION_HOURS} hours** "
+-        f"(by {deadline}).\n\n"
+-        f"If you need more time or cannot complete the work, please comment "
+-        f"`{UNASSIGN_COMMAND}` so others can pick it up.\n\n"
+-        "Happy coding! 🚀 — [OWASP BLT-Pool](https://pool.owaspblt.org)",
+-        token,
+-    )
+-
+-
+-async def _unassign(
+-    owner: str, repo: str, issue: dict, login: str, token: str
+-) -> None:
+-    num = issue["number"]
+-    assignees = [a["login"] for a in issue.get("assignees", [])]
+-    if login not in assignees:
+-        await create_comment(
+-            owner, repo, num,
+-            f"@{login} You are not currently assigned to this issue.",
+-            token,
+-        )
+-        return
+-    await github_api(
+-        "DELETE",
+-        f"/repos/{owner}/{repo}/issues/{num}/assignees",
+-        token,
+-        {"assignees": [login]},
+-    )
+-    await create_comment(
+-        owner, repo, num,
+-        f"@{login} You have been unassigned from this issue. "
+-        "Thanks for letting us know! 👍\n\n"
+-        "The issue is now open for others to pick up.",
+-        token,
+-    )
+-
+-
+ async def _get_last_assign_requester(
+     owner: str, repo: str, num: int, token: str
+ ) -> Optional[str]:
+@@ -6861,208 +6628,21 @@ async def on_fetch(request, env, ctx=None) -> Response:
+ 
+ 
+ # ---------------------------------------------------------------------------
+-# Scheduled event handler — runs on cron triggers
++# Scheduled event handler — called by blt-cron through POST /__scheduled
+ # ---------------------------------------------------------------------------
+ 
+ 
+-async def _run_scheduled(env):
+-    """Handle scheduled cron events to check and unassign stale issues.
+-    
+-    This runs periodically (configured in wrangler.toml) to find issues that:
+-    - Have assignees
+-    - Were assigned more than ASSIGNMENT_DURATION_HOURS ago
+-    - Have no linked pull requests
+-    
+-    Such issues are automatically unassigned to free them up for other contributors.
+-    """
+-    console.log("[CRON] Starting stale assignment check...")
+-    
+-    try:
+-        # Get GitHub App installation token
+-        app_id = getattr(env, "APP_ID", "")
+-        private_key = getattr(env, "PRIVATE_KEY", "")
+-        
+-        if not app_id or not private_key:
+-            console.error("[CRON] Missing APP_ID or PRIVATE_KEY")
+-            return
+-        
+-        # For cron jobs, we need to iterate through all installations
+-        # Get an app JWT first
+-        jwt_token = await create_github_jwt(app_id, private_key)
+-        
+-        # Fetch all installations
+-        installations_resp = await github_api("GET", "/app/installations", jwt_token)
+-        if installations_resp.status != 200:
+-            console.error(f"[CRON] Failed to fetch installations: {installations_resp.status}")
+-            return
+-        
+-        installations = json.loads(await installations_resp.text())
+-        console.log(f"[CRON] Found {len(installations)} installations")
+-        
+-        for installation in installations:
+-            install_id = installation["id"]
+-            account = installation["account"]
+-            account_login = account.get("login", "unknown")
+-            
+-            console.log(f"[CRON] Processing installation {install_id} for {account_login}")
+-            
+-            # Get installation token
+-            token = await get_installation_access_token(install_id, jwt_token)
+-            if not token:
+-                console.error(f"[CRON] Failed to get token for installation {install_id}")
+-                continue
+-            
+-            # Fetch all repos for this installation (limit to 20 for cron to prevent timeouts)
+-            repos = []
+-            if account.get("type") == "Organization":
+-                repos = await _fetch_org_repos(account_login, token, limit=20)
+-            else:
+-                # For user accounts, fetch user repos (limited)
+-                repos_resp = await github_api("GET", f"/users/{account_login}/repos?per_page=20", token)
+-                if repos_resp.status == 200:
+-                    repos = json.loads(await repos_resp.text())
+-            
+-            console.log(f"[CRON] Checking {len(repos)} repositories")
+-            
+-            # Check each repository for stale assignments
+-            for repo_data in repos:
+-                repo_name = repo_data["name"]
+-                owner = repo_data["owner"]["login"]
+-                
+-                await _check_stale_assignments(owner, repo_name, token)
+-                await _check_stale_mentor_assignments(owner, repo_name, token)
+-        
+-        console.log("[CRON] Stale assignment check complete")
+-        
+-    except Exception as e:
+-        console.error(f"[CRON] Error during scheduled task: {e}")
+-
+-
+ async def on_scheduled(controller, env, ctx=None):
+     """Cloudflare Python Workers cron entrypoint.
+ 
+     blt-cron sends ``task: "forge-leaderboard"`` every 20 minutes (forge pulls ledger into the
+-    leaderboard); calls without a task run the stale-assignment check.
++    leaderboard). Nothing else is scheduled: the 2-hourly stale-assignment sweep over every GitHub
++    App installation was removed (issue #38). It polled the OWASP-BLT GitHub repositories, which are
++    frozen copies now, and stale ``/assign`` claims on git.owaspblt.org are released by BLT-Action
++    (``blt-action/forge/stale.mjs``). A call without a known task does nothing.
+     """
+-    if str(getattr(controller, "task", "") or "") == FORGE_LEADERBOARD_TASK:
++    task = str(getattr(controller, "task", "") or "")
++    if task == FORGE_LEADERBOARD_TASK:
+         await _run_forge_leaderboard_sync(env)
+         return
+-    await _run_scheduled(env)
+-
+-
+-async def scheduled(event, env):
+-    """Backward-compatible alias for runtimes expecting scheduled()."""
+-    await _run_scheduled(env)
+-
+-
+-async def _check_stale_assignments(owner: str, repo: str, token: str):
+-    """Check a repository for stale issue assignments and unassign them."""
+-    try:
+-        # Fetch open issues with assignees
+-        issues_resp = await github_api(
+-            "GET",
+-            f"/repos/{owner}/{repo}/issues?state=open&per_page=100",
+-            token
+-        )
+-        
+-        if issues_resp.status != 200:
+-            return
+-        
+-        issues = json.loads(await issues_resp.text())
+-        
+-        # Filter issues that have assignees and are not pull requests
+-        assigned_issues = [
+-            issue for issue in issues
+-            if issue.get("assignees") and "pull_request" not in issue
+-        ]
+-        
+-        if not assigned_issues:
+-            return
+-        
+-        console.log(f"[CRON] Found {len(assigned_issues)} assigned issues in {owner}/{repo}")
+-        
+-        current_time = time.time()
+-        deadline_seconds = ASSIGNMENT_DURATION_HOURS * 3600
+-        
+-        for issue in assigned_issues:
+-            issue_number = issue["number"]
+-            assignees = issue.get("assignees", [])
+-            
+-            # Check if issue has linked PRs
+-            timeline_resp = await github_api(
+-                "GET",
+-                f"/repos/{owner}/{repo}/issues/{issue_number}/timeline",
+-                token
+-            )
+-            
+-            if timeline_resp.status != 200:
+-                continue
+-            
+-            timeline = json.loads(await timeline_resp.text())
+-            
+-            # Look for assignment events and cross-referenced PRs
+-            assignment_time = None
+-            has_linked_pr = False
+-            
+-            for event in timeline:
+-                event_type = event.get("event")
+-                
+-                # Track the most recent assignment
+-                if event_type == "assigned":
+-                    created_at = event.get("created_at", "")
+-                    if created_at:
+-                        event_timestamp = _parse_github_timestamp(created_at)
+-                        if event_timestamp:
+-                            assignment_time = event_timestamp
+-                
+-                # Check for cross-referenced PRs
+-                if event_type == "cross-referenced":
+-                    source = event.get("source", {})
+-                    if source.get("type") == "issue" and "pull_request" in source.get("issue", {}):
+-                        has_linked_pr = True
+-                        break
+-            
+-            # If no assignment time found in timeline, use updated_at as fallback
+-            if assignment_time is None:
+-                updated_at = issue.get("updated_at", "")
+-                if updated_at:
+-                    assignment_time = _parse_github_timestamp(updated_at)
+-            
+-            # Skip if we couldn't determine assignment time
+-            if assignment_time is None:
+-                continue
+-            
+-            time_elapsed = current_time - assignment_time
+-            
+-            # Unassign if deadline passed and no linked PR
+-            if time_elapsed > deadline_seconds and not has_linked_pr:
+-                hours_elapsed = int(time_elapsed / 3600)
+-                
+-                console.log(
+-                    f"[CRON] Unassigning stale issue {owner}/{repo}#{issue_number} "
+-                    f"(assigned {hours_elapsed}h ago, no PR)"
+-                )
+-                
+-                # Unassign all assignees
+-                assignee_logins = [a["login"] for a in assignees]
+-                await github_api(
+-                    "DELETE",
+-                    f"/repos/{owner}/{repo}/issues/{issue_number}/assignees",
+-                    token,
+-                    {"assignees": assignee_logins}
+-                )
+-                
+-                # Post a comment explaining the unassignment
+-                assignee_mentions = ", ".join(f"@{login}" for login in assignee_logins)
+-                await create_comment(
+-                    owner, repo, issue_number,
+-                    f"{assignee_mentions} This issue has been automatically unassigned because "
+-                    f"the {ASSIGNMENT_DURATION_HOURS}-hour deadline has passed without a linked pull request.\n\n"
+-                    f"The issue is now available for others to claim. If you'd still like to work on this, "
+-                    f"please comment `{ASSIGN_COMMAND}` again.\n\n"
+-                    "Thank you for your interest! 🙏 — [OWASP BLT-Pool](https://pool.owaspblt.org)",
+-                    token
+-                )
+-    
+-    except Exception as e:
+-        console.error(f"[CRON] Error checking {owner}/{repo}: {e}")
++    console.log(f"[CRON] nothing scheduled for task {task!r}; ignored")
+diff --git a/blt-pool/test_forge_leaderboard.py b/blt-pool/test_forge_leaderboard.py
+index cf78885695..b908817839 100644
+--- a/blt-pool/test_forge_leaderboard.py
++++ b/blt-pool/test_forge_leaderboard.py
+@@ -549,14 +549,16 @@ class TestWorkerLeaderboard(unittest.TestCase):
+ 
+     def test_cron_task_runs_forge_sync(self):
+         sync = AsyncMock(return_value={"ok": True})
+-        stale = AsyncMock()
++        github = AsyncMock()
+         with patch.object(_worker, "_run_forge_leaderboard_sync", new=sync), \
+-                patch.object(_worker, "_run_scheduled", new=stale):
++                patch.object(_worker, "github_api", new=github), \
++                patch.object(_worker, "console", new=self.quiet):
+             run(_worker.on_scheduled(_worker._CronEvent("6-59/20 * * * *", 1, "forge-leaderboard"), self.env))
+             sync.assert_awaited_once()
+-            stale.assert_not_awaited()
++            # The old 2-hourly call without a task no longer polls GitHub (issue #38).
+             run(_worker.on_scheduled(_worker._CronEvent("0 */2 * * *", 1), self.env))
+-            stale.assert_awaited_once()
++            sync.assert_awaited_once()
++            github.assert_not_called()
+ 
+     def test_cron_dispatch_passes_the_task(self):
+         env = types.SimpleNamespace(CRON_SECRET="s3cret")
+diff --git a/blt-pool/test_worker.py b/blt-pool/test_worker.py
+index 2f95f3c2cf..80a393210f 100644
+--- a/blt-pool/test_worker.py
++++ b/blt-pool/test_worker.py
+@@ -334,118 +334,6 @@ def _make_pr_payload(
+     }
+ 
+ 
+-class TestHandleAssign(unittest.TestCase):
+-    """_assign — mirrors handleAssign in issue-assign.test.js"""
+-
+-    def _run_assign(self, payload, comments, github_calls):
+-        async def _inner():
+-            with patch.object(_worker, "create_comment", new=AsyncMock(side_effect=lambda o, r, n, b, t: comments.append(b))):
+-                with patch.object(_worker, "github_api", new=AsyncMock(side_effect=lambda *a, **kw: github_calls.append(a))):
+-                    await _worker._assign(
+-                        payload["repository"]["owner"]["login"],
+-                        payload["repository"]["name"],
+-                        payload["issue"],
+-                        payload["comment"]["user"]["login"],
+-                        "tok",
+-                    )
+-        _run(_inner())
+-
+-    def test_assigns_user_to_open_issue(self):
+-        payload = _make_issue_payload(labels=[{"name": "help wanted"}])
+-        comments, calls = [], []
+-        self._run_assign(payload, comments, calls)
+-        # Expect a POST to the assignees endpoint
+-        self.assertTrue(any(
+-            method == "POST" and "assignees" in path
+-            for method, path, *_ in calls
+-        ))
+-        self.assertTrue(any("assigned to this issue" in c for c in comments))
+-
+-    def test_does_not_assign_without_help_wanted_label(self):
+-        payload = _make_issue_payload(labels=[])
+-        comments, calls = [], []
+-        mock_ensure = AsyncMock()
+-        with patch.object(_worker, "_ensure_label_exists", new=mock_ensure):
+-            self._run_assign(payload, comments, calls)
+-        # Comment must mention the requester, @donnieblt, and the "help wanted" label
+-        self.assertTrue(any("@alice" in c and "@donnieblt" in c and "help wanted" in c for c in comments))
+-        # _ensure_label_exists must be called for the "needs-approval" label
+-        mock_ensure.assert_called_once_with(
+-            "OWASP-BLT", "TestRepo",
+-            _worker.NEEDS_APPROVAL_LABEL, _worker.NEEDS_APPROVAL_LABEL_COLOR, "tok",
+-        )
+-        # The "needs-approval" label must be added to the issue via POST
+-        self.assertTrue(any(
+-            method == "POST" and "labels" in path and body == {"labels": ["needs-approval"]}
+-            for method, path, _tok, body in calls
+-        ))
+-
+-    def test_does_not_assign_closed_issue(self):
+-        payload = _make_issue_payload(state="closed")
+-        comments, calls = [], []
+-        self._run_assign(payload, comments, calls)
+-        self.assertEqual(calls, [])
+-        self.assertTrue(any("already closed" in c for c in comments))
+-
+-    def test_does_not_assign_already_assigned(self):
+-        payload = _make_issue_payload(assignees=[{"login": "alice"}])
+-        comments, calls = [], []
+-        self._run_assign(payload, comments, calls)
+-        self.assertEqual(calls, [])
+-        self.assertTrue(any("already assigned" in c for c in comments))
+-
+-    def test_does_not_assign_when_max_assignees_reached(self):
+-        payload = _make_issue_payload(
+-            assignees=[{"login": "bob"}, {"login": "carol"}, {"login": "dave"}]
+-        )
+-        comments, calls = [], []
+-        self._run_assign(payload, comments, calls)
+-        self.assertEqual(calls, [])
+-        self.assertTrue(any("maximum number of assignees" in c for c in comments))
+-
+-    def test_does_not_assign_on_pull_request(self):
+-        payload = _make_issue_payload(is_pr=True)
+-        comments, calls = [], []
+-        self._run_assign(payload, comments, calls)
+-        self.assertEqual(calls, [])
+-        self.assertTrue(any("pull requests" in c for c in comments))
+-
+-
+-class TestHandleUnassign(unittest.TestCase):
+-    """_unassign — mirrors handleUnassign in issue-assign.test.js"""
+-
+-    def _run_unassign(self, payload, comments, github_calls):
+-        async def _inner():
+-            with patch.object(_worker, "create_comment", new=AsyncMock(side_effect=lambda o, r, n, b, t: comments.append(b))):
+-                with patch.object(_worker, "github_api", new=AsyncMock(side_effect=lambda *a, **kw: github_calls.append(a))):
+-                    await _worker._unassign(
+-                        payload["repository"]["owner"]["login"],
+-                        payload["repository"]["name"],
+-                        payload["issue"],
+-                        payload["comment"]["user"]["login"],
+-                        "tok",
+-                    )
+-        _run(_inner())
+-
+-    def test_removes_user_from_assigned_issue(self):
+-        payload = _make_issue_payload(assignees=[{"login": "alice"}])
+-        comments, calls = [], []
+-        self._run_unassign(payload, comments, calls)
+-        # Expect a DELETE to the assignees endpoint
+-        self.assertTrue(any(
+-            method == "DELETE" and "assignees" in path
+-            for method, path, *_ in calls
+-        ))
+-        self.assertTrue(any("unassigned" in c for c in comments))
+-
+-    def test_does_not_remove_user_not_assigned(self):
+-        payload = _make_issue_payload(assignees=[])
+-        comments, calls = [], []
+-        self._run_unassign(payload, comments, calls)
+-        self.assertEqual(calls, [])
+-        self.assertTrue(any("not currently assigned" in c for c in comments))
+-
+-
+ class TestGetLastAssignRequester(unittest.TestCase):
+     """_get_last_assign_requester — finds the last human /assign commenter"""
+ 
+@@ -701,65 +589,61 @@ class TestHandleDeny(unittest.TestCase):
+ 
+ 
+ class TestHandleIssueComment(unittest.TestCase):
+-    """handle_issue_comment — routes /assign, /unassign, /approve, /deny commands"""
++    """handle_issue_comment — routes /approve and /deny; /assign and /unassign belong to BLT-Action."""
+ 
+-    def _run_comment(self, payload, assign_calls, unassign_calls,
+-                     approve_calls=None, deny_calls=None):
+-        if approve_calls is None:
+-            approve_calls = []
+-        if deny_calls is None:
+-            deny_calls = []
++    def _run_comment(self, payload, approve_calls=None, deny_calls=None, github_calls=None, reactions=None):
++        approve_calls = [] if approve_calls is None else approve_calls
++        deny_calls = [] if deny_calls is None else deny_calls
++        github_calls = [] if github_calls is None else github_calls
++        reactions = [] if reactions is None else reactions
+ 
+         async def _inner():
+-            with patch.object(_worker, "_assign", new=AsyncMock(side_effect=lambda *a: assign_calls.append(a))):
+-                with patch.object(_worker, "_unassign", new=AsyncMock(side_effect=lambda *a: unassign_calls.append(a))):
+-                    with patch.object(_worker, "_approve", new=AsyncMock(side_effect=lambda *a: approve_calls.append(a))):
+-                        with patch.object(_worker, "_deny", new=AsyncMock(side_effect=lambda *a: deny_calls.append(a))):
+-                            await _worker.handle_issue_comment(payload, "tok")
++            with patch.object(_worker, "_approve", new=AsyncMock(side_effect=lambda *a: approve_calls.append(a))), \
++                    patch.object(_worker, "_deny", new=AsyncMock(side_effect=lambda *a: deny_calls.append(a))), \
++                    patch.object(_worker, "github_api", new=AsyncMock(side_effect=lambda *a, **kw: github_calls.append(a))), \
++                    patch.object(_worker, "create_comment", new=AsyncMock(side_effect=lambda *a, **kw: github_calls.append(a))), \
++                    patch.object(_worker, "create_reaction", new=AsyncMock(side_effect=lambda *a, **kw: reactions.append(a))):
++                await _worker.handle_issue_comment(payload, "tok")
+         _run(_inner())
+ 
+-    def test_routes_assign_command(self):
+-        payload = _make_issue_payload(comment_body="/assign")
+-        assigns, unassigns = [], []
+-        self._run_comment(payload, assigns, unassigns)
+-        self.assertEqual(len(assigns), 1)
+-        self.assertEqual(len(unassigns), 0)
++    def test_assign_and_unassign_are_left_to_blt_action(self):
++        for body in ("/assign", "/unassign", "/assign please", "I'd like this.\n/unassign"):
++            calls, reactions = [], []
++            self._run_comment(_make_issue_payload(comment_body=body), github_calls=calls, reactions=reactions)
++            self.assertEqual(calls, [], body)
++            self.assertEqual(reactions, [], body)
+ 
+-    def test_routes_unassign_command(self):
+-        payload = _make_issue_payload(comment_body="/unassign")
+-        assigns, unassigns = [], []
+-        self._run_comment(payload, assigns, unassigns)
+-        self.assertEqual(len(assigns), 0)
+-        self.assertEqual(len(unassigns), 1)
++    def test_assign_handlers_are_gone(self):
++        for name in ("_assign", "_unassign", "_run_scheduled", "_check_stale_assignments",
++                     "_check_stale_mentor_assignments"):
++            self.assertFalse(hasattr(_worker, name), name)
+ 
+     def test_ignores_bot_comments(self):
+         payload = _make_issue_payload(
+-            comment_body="/assign",
++            comment_body="/approve",
+             comment_user={"login": "bot", "type": "Bot"},
+         )
+-        assigns, unassigns = [], []
+-        self._run_comment(payload, assigns, unassigns)
+-        self.assertEqual(assigns, [])
+-        self.assertEqual(unassigns, [])
++        approves = []
++        self._run_comment(payload, approves)
++        self.assertEqual(approves, [])
+ 
+     def test_ignores_unrelated_comments(self):
+         payload = _make_issue_payload(comment_body="just a comment")
+-        assigns, unassigns = [], []
+-        self._run_comment(payload, assigns, unassigns)
+-        self.assertEqual(assigns, [])
+-        self.assertEqual(unassigns, [])
++        approves, denies, calls = [], [], []
++        self._run_comment(payload, approves, denies, calls)
++        self.assertEqual((approves, denies, calls), ([], [], []))
+ 
+     def test_routes_approve_command(self):
+         payload = _make_issue_payload(comment_body="/approve")
+-        assigns, unassigns, approves, denies = [], [], [], []
+-        self._run_comment(payload, assigns, unassigns, approves, denies)
++        approves, denies = [], []
++        self._run_comment(payload, approves, denies)
+         self.assertEqual(len(approves), 1)
+         self.assertEqual(len(denies), 0)
+ 
+     def test_routes_deny_command(self):
+         payload = _make_issue_payload(comment_body="/deny")
+-        assigns, unassigns, approves, denies = [], [], [], []
+-        self._run_comment(payload, assigns, unassigns, approves, denies)
++        approves, denies = [], []
++        self._run_comment(payload, approves, denies)
+         self.assertEqual(len(approves), 0)
+         self.assertEqual(len(denies), 1)
+ 
+@@ -1537,9 +1421,7 @@ class TestHandleIssueCommentLeaderboard(unittest.TestCase):
+                 leaderboard_calls.append((owner, repo, number, login))
+             
+             with patch.object(_worker, "_post_or_update_leaderboard", new=_mock_leaderboard):
+-                with patch.object(_worker, "_assign", new=AsyncMock()):
+-                    with patch.object(_worker, "_unassign", new=AsyncMock()):
+-                        await _worker.handle_issue_comment(payload, "tok")
++                await _worker.handle_issue_comment(payload, "tok")
+         _run(_inner())
+ 
+     def test_routes_leaderboard_command(self):
+@@ -1852,7 +1734,6 @@ class TestPostMergedPrCombinedComment(unittest.TestCase):
+         self.assertEqual(len(posted), 1)
+ 
+ 
+-
+     """Test auto-close for users with too many open PRs"""
+ 
+     def _run_check(self, search_response, comment_calls, api_calls):
+@@ -5748,51 +5629,6 @@ class TestRoundRobinMentorReviewer(unittest.TestCase):
+         self.assertEqual(reviewer_calls, [])
+ 
+ 
+-class TestGetLastHumanActivityTs(unittest.TestCase):
+-    """_get_last_human_activity_ts — returns most recent non-bot comment timestamp."""
+-
+-    def _run(self, comments_response, issue_created_at="2024-01-01T00:00:00Z"):
+-        issue = {"created_at": issue_created_at}
+-        comments_json = json.dumps(comments_response)
+-
+-        async def _inner():
+-            with patch.object(
+-                _worker,
+-                "github_api",
+-                new=AsyncMock(return_value=types.SimpleNamespace(
+-                    status=200, text=AsyncMock(return_value=comments_json)
+-                )),
+-            ):
+-                return await _worker._get_last_human_activity_ts(
+-                    "OWASP-BLT", "TestRepo", 1, issue, "tok"
+-                )
+-
+-        return _run(_inner())
+-
+-    def test_returns_most_recent_human_comment_ts(self):
+-        # Comments are returned newest-first (direction=desc).
+-        comments = [
+-            {"user": {"login": "bob", "type": "User"}, "created_at": "2024-06-20T12:00:00Z"},
+-            {"user": {"login": "alice", "type": "User"}, "created_at": "2024-06-15T12:00:00Z"},
+-        ]
+-        ts = self._run(comments)
+-        # The function should return bob's timestamp (first non-bot comment in desc order).
+-        self.assertAlmostEqual(ts, _worker._parse_github_timestamp("2024-06-20T12:00:00Z"), delta=1)
+-
+-    def test_falls_back_to_created_at_when_no_human_comments(self):
+-        comments = [
+-            {"user": {"login": "github-actions[bot]", "type": "Bot"}, "created_at": "2024-06-15T12:00:00Z"},
+-        ]
+-        ts = self._run(comments, issue_created_at="2024-01-10T08:00:00Z")
+-        expected = _worker._parse_github_timestamp("2024-01-10T08:00:00Z")
+-        self.assertAlmostEqual(ts, expected, delta=1)
+-
+-    def test_falls_back_when_no_comments(self):
+-        ts = self._run([], issue_created_at="2024-03-05T10:00:00Z")
+-        expected = _worker._parse_github_timestamp("2024-03-05T10:00:00Z")
+-        self.assertAlmostEqual(ts, expected, delta=1)
+-
+-
+ class TestBuildReferralLeaderboard(unittest.TestCase):
+     """_build_referral_leaderboard — tallies referred_by across mentors."""
+ 
+@@ -6139,8 +5975,6 @@ class TestLoadMentorsFromD1(unittest.TestCase):
+             self.assertIn("name", m)
+ 
+ 
+-
+-
+ class TestOnFetchHomepage(unittest.TestCase):
+     """on_fetch GET / — homepage loads mentors from D1."""
+ 
+@@ -6987,6 +6821,38 @@ class TestCronDispatch(unittest.TestCase):
+         self.assertIn("boom", body["error"])
+ 
+ 
++class TestOnScheduled(unittest.TestCase):
++    """on_scheduled — only the forge leaderboard task runs; nothing polls GitHub (issue #38)."""
++
++    def _call(self, task):
++        sync = AsyncMock()
++        github = AsyncMock()
++        quiet = types.SimpleNamespace(error=lambda *a: None, log=lambda *a: None)
++
++        async def _inner():
++            with patch.object(_worker, "_run_forge_leaderboard_sync", new=sync), \
++                    patch.object(_worker, "github_api", new=github), \
++                    patch.object(_worker, "create_github_jwt", new=AsyncMock()) as jwt, \
++                    patch.object(_worker, "console", new=quiet):
++                await _worker.on_scheduled(_worker._CronEvent("0 */2 * * *", 1, task), types.SimpleNamespace())
++                return jwt
++
++        jwt = _run(_inner())
++        return sync, github, jwt
++
++    def test_forge_leaderboard_task_runs_the_sync(self):
++        sync, github, _ = self._call("forge-leaderboard")
++        sync.assert_awaited_once()
++        github.assert_not_called()
++
++    def test_untasked_call_does_not_poll_github(self):
++        for task in ("", "stale-assignments"):
++            sync, github, jwt = self._call(task)
++            sync.assert_not_called()
++            github.assert_not_called()
++            jwt.assert_not_called()
++
++
+ class TestAdminSameOriginPost(unittest.TestCase):
+     class _Req:
+         def __init__(self, headers, url="https://pool.owaspblt.org/admin/mentors/action"):
+diff --git a/docs/workflows.md b/docs/workflows.md
+index ca44c8124c..26981814ed 100644
+--- a/docs/workflows.md
++++ b/docs/workflows.md
+@@ -34,6 +34,7 @@ In the table, CF means `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, which
+ | `deploy.yml` | new | push to main: `scripts/deploy.sh --changed $FORKMESH_BEFORE` (folders in `scripts/deploy/projects.tsv`); dispatch input `project` (a name, several space-separated, or `all`) | CF |
+ | `readme.yml` | GitHub `readme.yml` | push to main (any path; Projects, Deploying and Contributors), `17 6 * * *` (also refreshes Blog Posts); commits `README.md` and `.forkmesh/contributors/` | `GH_API_TOKEN` (optional) |
+ | `blt-action--assign.yml` | BLT-Action `/assign`, `/unassign` | issue comments (created) starting a line with `/assign` or `/unassign`; dispatch input `issue` (process the commands already in that issue). Verified authors only. Assigns through the job API (falls back to committing a signed ledger event on an older instance) and replies through the job API | `BLT_TASKS_SEED` (fallback only) |
++| `blt-action--unassign-stale.yml` | BLT-Action / BLT-Pool stale-assignment unassign | `53 5 * * *`: warns, then releases, self-claimed issues with no pull request and no update from the assignee for 7 days (see Stale claims). Job API only, no commit | none |
+ | `blt-cve--build-index.yml` | GitHub | push to main under `blt-cve/public/cves`, `public/schema`, `scripts/build_index.py` | CF |
+ | `blt-design-contest--build-showcase.yml` | GitLab `build_showcase` | issue events on contest issues (project label or `[blt-design-contest]` prefix, contest labels, `winner`), `47 7 * * *` (votes raise no issue event), push under `blt-design-contest/scripts/` or `data/`; reads the git.owaspblt.org issue ledger and writes changed pages to KV (`blt-design-contest/scripts/refresh-kv.sh`), no commit | CF (with KV write) |
+ | `blt-extension--release.yml` | GitHub `release.yml` + packaging from `create-release.yml` | dispatch only (input `publish`) | `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, `CHROME_REFRESH_TOKEN` |
+@@ -65,8 +66,9 @@ only:
+ - `/assign` is refused when the issue is closed, when someone else is assigned, or when the commenter
+   already holds another open issue (BLT-Action allowed one issue without an open pull request; the
+   forge has no issue-to-pull link, so any other open assignment counts). Otherwise the commenter is
+-  assigned and asked to open a pull request within 7 days or comment `/unassign`. Nothing unassigns
+-  stale issues automatically.
++  assigned and asked to open a pull request within 7 days or comment `/unassign`. A claim with no
++  pull request and no update for 7 days is released by `blt-action--unassign-stale.yml` (Stale claims
++  below).
+ - `/unassign` removes only the commenter.
+ - Comments from bots (`[bot]`, `-actions`) are ignored.
+ - Only a verified author counts. The forge sets an issue comment's author from the signed-in session
+@@ -107,6 +109,28 @@ before this workflow (otherwise every comment is refused as unverified). `BLT_TA
+ contents of `~/.config/blt/blt-tasks.seed`, base64url, or 64 hex characters, under the repository's
+ Settings tab, "Actions secrets") is needed only for the fallback.
+ 
++### Stale claims
++
++BLT-Action is the only bot that answers `/assign` (issue #38). BLT-Pool (`blt-pool`, the
++`blt-github-app` Worker) ignores `/assign` and `/unassign`, and its 2-hourly blt-cron job, which swept
++every GitHub App installation for stale assignments on the frozen OWASP-BLT/* GitHub repositories, is
++gone. Its stale-assignment release is ported here as `blt-action/forge/stale.mjs`, run daily by
++`blt-action--unassign-stale.yml`:
++
++- Only self-claims are released: claims made with `/assign` (recorded by the `-actions` bot or
++  `blt-tasks[bot]`) or with the web claim button by the assignee. An assignment a maintainer made for
++  someone else is left alone, as is an assignee with no claim event in the ledger.
++- The clock starts at the newest claim and restarts with each verified comment the assignee posts on
++  the issue. Bot comments (including the warning) do not restart it.
++- An assignee who has an open pull request, or opened any pull request after the claim, keeps the
++  issue (the forge has no issue-to-pull link, so any pull request by them counts). Pull requests are
++  read anonymously from the `forkmesh/pulls` ledger branch; when it cannot be read the run stops and
++  changes nothing.
++- After 6 quiet days the assignee gets one warning (`<!-- blt-assign-stale-warning:<name>:<since> -->`).
++  At 7 days, once that warning is at least 20 hours old, they are unassigned through the job API with
++  a reply saying so. At most 10 actions per run.
++- On an instance without the job API assignees endpoint the run stops; there is no ledger fallback.
++
+ ### Schedules chosen for the GitLab jobs
+ 
+ GitLab pipeline schedules were set in the GitLab UI, so their times were not in the repository. The schedules above came from:
+
+From 19d17f422bd1ce80b79b661e4fee154cdd148cff Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Tue, 20 Oct 2026 20:26:19 -0400
+Subject: [PATCH 2/2] Folder info.json for 37 projects whose README fallback
+ reads badly; blt-cron logo
+
+The forge's folder About box takes .forkmesh/info.json (name, about,
+website) and otherwise the README's first paragraph, cut at 240 characters.
+For these folders that came out cut mid-sentence, as a "Live Site: ...
+Source Code: ..." line, a bare title, a sentence ending in "to:", or empty
+(blt-tomato). blt-cron and coderabbit had no box at all. Each now has a short
+info.json, with a website only where the README names a live site.
+
+scripts/readme/update_readme.py reads the same file for the root README
+project table: about over the hard-coded DESCRIPTIONS and the README text,
+and website when the README has no Live Site line. Four DESCRIPTIONS entries
+it replaces are gone; the coderabbit one was wrong (that folder only has a
+license).
+
+blt-cron/logo.svg: a clock on the red disc, 358 bytes, in the same style and
+colour (#dc2626) as the other project logos, also shown at the top of its
+README.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ blt-action/.forkmesh/info.json             |  4 ++++
+ blt-api/.forkmesh/info.json                |  5 ++++
+ blt-cli/.forkmesh/info.json                |  4 ++++
+ blt-core/.forkmesh/info.json               |  5 ++++
+ blt-cron/.forkmesh/info.json               |  4 ++++
+ blt-cron/README.md                         |  2 ++
+ blt-cron/logo.svg                          |  1 +
+ blt-cve/.forkmesh/info.json                |  5 ++++
+ blt-docs/.forkmesh/info.json               |  5 ++++
+ blt-enforcement/.forkmesh/info.json        |  5 ++++
+ blt-extension/.forkmesh/info.json          |  5 ++++
+ blt-flutter/.forkmesh/info.json            |  5 ++++
+ blt-gitcaster/.forkmesh/info.json          |  5 ++++
+ blt-ideas/.forkmesh/info.json              |  5 ++++
+ blt-jobs/.forkmesh/info.json               |  5 ++++
+ blt-ketchup/.forkmesh/info.json            |  5 ++++
+ blt-lettuce/.forkmesh/info.json            |  5 ++++
+ blt-mayo/.forkmesh/info.json               |  4 ++++
+ blt-mcp/.forkmesh/info.json                |  5 ++++
+ blt-monitor/.forkmesh/info.json            |  5 ++++
+ blt-netguardian-client/.forkmesh/info.json |  4 ++++
+ blt-newsletter/.forkmesh/info.json         |  5 ++++
+ blt-nexus/.forkmesh/info.json              |  5 ++++
+ blt-owasp-bumper/.forkmesh/info.json       |  5 ++++
+ blt-owasp-metadata/.forkmesh/info.json     |  5 ++++
+ blt-owasp-wich/.forkmesh/info.json         |  5 ++++
+ blt-panini/.forkmesh/info.json             |  5 ++++
+ blt-preflight/.forkmesh/info.json          |  5 ++++
+ blt-profiles/.forkmesh/info.json           |  5 ++++
+ blt-rewards/.forkmesh/info.json            |  5 ++++
+ blt-safecloak/.forkmesh/info.json          |  5 ++++
+ blt-sizzle/.forkmesh/info.json             |  5 ++++
+ blt-timer-flutter/.forkmesh/info.json      |  4 ++++
+ blt-toasty/.forkmesh/info.json             |  5 ++++
+ blt-tomato/.forkmesh/info.json             |  5 ++++
+ blt-university/.forkmesh/info.json         |  5 ++++
+ blt-waypoint/.forkmesh/info.json           |  5 ++++
+ coderabbit/.forkmesh/info.json             |  4 ++++
+ my-gsoc-tool/.forkmesh/info.json           |  5 ++++
+ scripts/readme/update_readme.py            | 27 ++++++++++++++++------
+ 40 files changed, 201 insertions(+), 7 deletions(-)
+ create mode 100644 blt-action/.forkmesh/info.json
+ create mode 100644 blt-api/.forkmesh/info.json
+ create mode 100644 blt-cli/.forkmesh/info.json
+ create mode 100644 blt-core/.forkmesh/info.json
+ create mode 100644 blt-cron/.forkmesh/info.json
+ create mode 100644 blt-cron/logo.svg
+ create mode 100644 blt-cve/.forkmesh/info.json
+ create mode 100644 blt-docs/.forkmesh/info.json
+ create mode 100644 blt-enforcement/.forkmesh/info.json
+ create mode 100644 blt-extension/.forkmesh/info.json
+ create mode 100644 blt-flutter/.forkmesh/info.json
+ create mode 100644 blt-gitcaster/.forkmesh/info.json
+ create mode 100644 blt-ideas/.forkmesh/info.json
+ create mode 100644 blt-jobs/.forkmesh/info.json
+ create mode 100644 blt-ketchup/.forkmesh/info.json
+ create mode 100644 blt-lettuce/.forkmesh/info.json
+ create mode 100644 blt-mayo/.forkmesh/info.json
+ create mode 100644 blt-mcp/.forkmesh/info.json
+ create mode 100644 blt-monitor/.forkmesh/info.json
+ create mode 100644 blt-netguardian-client/.forkmesh/info.json
+ create mode 100644 blt-newsletter/.forkmesh/info.json
+ create mode 100644 blt-nexus/.forkmesh/info.json
+ create mode 100644 blt-owasp-bumper/.forkmesh/info.json
+ create mode 100644 blt-owasp-metadata/.forkmesh/info.json
+ create mode 100644 blt-owasp-wich/.forkmesh/info.json
+ create mode 100644 blt-panini/.forkmesh/info.json
+ create mode 100644 blt-preflight/.forkmesh/info.json
+ create mode 100644 blt-profiles/.forkmesh/info.json
+ create mode 100644 blt-rewards/.forkmesh/info.json
+ create mode 100644 blt-safecloak/.forkmesh/info.json
+ create mode 100644 blt-sizzle/.forkmesh/info.json
+ create mode 100644 blt-timer-flutter/.forkmesh/info.json
+ create mode 100644 blt-toasty/.forkmesh/info.json
+ create mode 100644 blt-tomato/.forkmesh/info.json
+ create mode 100644 blt-university/.forkmesh/info.json
+ create mode 100644 blt-waypoint/.forkmesh/info.json
+ create mode 100644 coderabbit/.forkmesh/info.json
+ create mode 100644 my-gsoc-tool/.forkmesh/info.json
+
+diff --git a/blt-action/.forkmesh/info.json b/blt-action/.forkmesh/info.json
+new file mode 100644
+index 0000000000..0c730cf706
+--- /dev/null
++++ b/blt-action/.forkmesh/info.json
+@@ -0,0 +1,4 @@
++{
++  "name": "BLT-Action",
++  "about": "Issue automation for BLT: /assign and /unassign on git.owaspblt.org issues and the daily release of stale claims (forge workflows), plus the original GitHub Action for other repositories."
++}
+diff --git a/blt-api/.forkmesh/info.json b/blt-api/.forkmesh/info.json
+new file mode 100644
+index 0000000000..caafe5caea
+--- /dev/null
++++ b/blt-api/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-API",
++  "about": "REST API for OWASP BLT, written in Python on Cloudflare Workers: bugs, users, domains, organizations, projects, bug hunts, leaderboards and statistics.",
++  "website": "https://api.owaspblt.org/"
++}
+diff --git a/blt-cli/.forkmesh/info.json b/blt-cli/.forkmesh/info.json
+new file mode 100644
+index 0000000000..bf9d557b24
+--- /dev/null
++++ b/blt-cli/.forkmesh/info.json
+@@ -0,0 +1,4 @@
++{
++  "name": "BLT-CLI",
++  "about": "Terminal (TUI) client for OWASP BLT, written in Rust with Ratatui: browse and triage issues, follow bug hunts and submit vulnerability reports, directly against the BLT API or through BLT-MCP."
++}
+diff --git a/blt-core/.forkmesh/info.json b/blt-core/.forkmesh/info.json
+new file mode 100644
+index 0000000000..810e76d2ac
+--- /dev/null
++++ b/blt-core/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Core",
++  "about": "The main OWASP BLT platform: a Django app for gamified, crowd-sourced bug reporting and vulnerability disclosure across websites, apps and Git repositories.",
++  "website": "https://owaspblt.org/"
++}
+diff --git a/blt-cron/.forkmesh/info.json b/blt-cron/.forkmesh/info.json
+new file mode 100644
+index 0000000000..be52eafbbb
+--- /dev/null
++++ b/blt-cron/.forkmesh/info.json
+@@ -0,0 +1,4 @@
++{
++  "name": "BLT-Cron",
++  "about": "Cloudflare Worker that holds the account's only cron trigger and runs every BLT Worker's scheduled job on that job's own schedule, through service bindings."
++}
+diff --git a/blt-cron/README.md b/blt-cron/README.md
+index be553e78cf..e65ab694ac 100644
+--- a/blt-cron/README.md
++++ b/blt-cron/README.md
+@@ -1,5 +1,7 @@
+ # BLT Cron
+ 
++<p align="center"><img src="logo.svg" alt="blt-cron logo" width="160" height="160"></p>
++
+ One Cloudflare Worker holds the account's only cron trigger (`* * * * *`) and runs every BLT Worker's scheduled job on that job's own schedule. Cloudflare's free plan allows 5 cron triggers per account; this keeps all of them in one.
+ 
+ Each minute, `blt-cron` checks the jobs in `src/jobs.js` and, for each one whose cron expression (UTC) matches, sends `POST /__scheduled` with `{cron, scheduledTime}` (plus `task` when the row has one) to that Worker through a service binding. The Worker runs the same code its cron trigger used to run.
+diff --git a/blt-cron/logo.svg b/blt-cron/logo.svg
+new file mode 100644
+index 0000000000..f5ea80eac3
+--- /dev/null
++++ b/blt-cron/logo.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img"><circle cx="32" cy="32" r="30" fill="#dc2626"/><g fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="18" stroke-width="5"/><path d="M32 21v11l7 6" stroke-width="5"/><path d="M32 6v3M58 32h-3M32 58v-3M6 32h3" stroke-width="3"/></g></svg>
+diff --git a/blt-cve/.forkmesh/info.json b/blt-cve/.forkmesh/info.json
+new file mode 100644
+index 0000000000..9b3de443d5
+--- /dev/null
++++ b/blt-cve/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-CVE",
++  "about": "Community vulnerability registry under the BLT-YYYY-NNNN namespace, published as static, machine-readable JSON on Cloudflare with no backend.",
++  "website": "https://cve.owaspblt.org/"
++}
+diff --git a/blt-docs/.forkmesh/info.json b/blt-docs/.forkmesh/info.json
+new file mode 100644
+index 0000000000..7a73abef62
+--- /dev/null
++++ b/blt-docs/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Docs",
++  "about": "MkDocs source of the OWASP BLT documentation: user workflows, contributor guidance, API notes and platform maintenance.",
++  "website": "https://docs.owaspblt.org/"
++}
+diff --git a/blt-enforcement/.forkmesh/info.json b/blt-enforcement/.forkmesh/info.json
+new file mode 100644
+index 0000000000..8eb37f0c5e
+--- /dev/null
++++ b/blt-enforcement/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Enforcement",
++  "about": "IP and trademark defense tools: trademark name checks and repository comparison for code similarity and license issues.",
++  "website": "https://enforcement.owaspblt.org/"
++}
+diff --git a/blt-extension/.forkmesh/info.json b/blt-extension/.forkmesh/info.json
+new file mode 100644
+index 0000000000..94a2955293
+--- /dev/null
++++ b/blt-extension/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Extension",
++  "about": "Chrome extension that takes screenshots of whole pages or selected areas and adds them to the BLT website.",
++  "website": "https://extension.owaspblt.org/"
++}
+diff --git a/blt-flutter/.forkmesh/info.json b/blt-flutter/.forkmesh/info.json
+new file mode 100644
+index 0000000000..9706477a85
+--- /dev/null
++++ b/blt-flutter/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Flutter",
++  "about": "OWASP BLT mobile app in Flutter: report bugs, browse issues and leaderboards, and join bug hunts.",
++  "website": "https://flutter.owaspblt.org/"
++}
+diff --git a/blt-gitcaster/.forkmesh/info.json b/blt-gitcaster/.forkmesh/info.json
+new file mode 100644
+index 0000000000..d528f54300
+--- /dev/null
++++ b/blt-gitcaster/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Gitcaster",
++  "about": "Live leaderboard of GitHub repository activity with AI-generated, sportscaster-style commentary on each event.",
++  "website": "https://gitcaster.owaspblt.org/"
++}
+diff --git a/blt-ideas/.forkmesh/info.json b/blt-ideas/.forkmesh/info.json
+new file mode 100644
+index 0000000000..7df26a21e9
+--- /dev/null
++++ b/blt-ideas/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Ideas",
++  "about": "Brainstorming proposals for future OWASP BLT development, each scoped to one 350-hour project slot; community direction, not commitments.",
++  "website": "https://ideas.owaspblt.org/"
++}
+diff --git a/blt-jobs/.forkmesh/info.json b/blt-jobs/.forkmesh/info.json
+new file mode 100644
+index 0000000000..ee243b5061
+--- /dev/null
++++ b/blt-jobs/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Jobs",
++  "about": "Git-native job board for the OWASP BLT ecosystem: job listings and seeker profiles are Markdown files in this folder, published as a static site.",
++  "website": "https://jobs.owaspblt.org/"
++}
+diff --git a/blt-ketchup/.forkmesh/info.json b/blt-ketchup/.forkmesh/info.json
+new file mode 100644
+index 0000000000..a394045ee7
+--- /dev/null
++++ b/blt-ketchup/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Ketchup",
++  "about": "Real-time collaboration workspace for penetration testing teams: shared findings, CVSS scoring, evidence and escalation to BLT.",
++  "website": "https://ketchup.owaspblt.org/"
++}
+diff --git a/blt-lettuce/.forkmesh/info.json b/blt-lettuce/.forkmesh/info.json
+new file mode 100644
+index 0000000000..989219e0d5
+--- /dev/null
++++ b/blt-lettuce/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Lettuce",
++  "about": "Slack bot for the OWASP community, running on Cloudflare Workers: welcome messages for new members, project discovery and contributor help.",
++  "website": "https://lettuce.owaspblt.org/"
++}
+diff --git a/blt-mayo/.forkmesh/info.json b/blt-mayo/.forkmesh/info.json
+new file mode 100644
+index 0000000000..278ef71c50
+--- /dev/null
++++ b/blt-mayo/.forkmesh/info.json
+@@ -0,0 +1,4 @@
++{
++  "name": "BLT-Mayo",
++  "about": "Read-only Linux security auditing tool (Monitor, Analyze, Yield, Observe) that scans filesystem artifacts for dangerous shell execution and reports explainable findings."
++}
+diff --git a/blt-mcp/.forkmesh/info.json b/blt-mcp/.forkmesh/info.json
+new file mode 100644
+index 0000000000..49acabbdda
+--- /dev/null
++++ b/blt-mcp/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-MCP",
++  "about": "MCP (Model Context Protocol) server that gives AI agents and IDEs structured access to OWASP BLT: log bugs, triage issues and query data.",
++  "website": "https://mcp.owaspblt.org/"
++}
+diff --git a/blt-monitor/.forkmesh/info.json b/blt-monitor/.forkmesh/info.json
+new file mode 100644
+index 0000000000..7facd0e9a2
+--- /dev/null
++++ b/blt-monitor/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Monitor",
++  "about": "Website monitor on Cloudflare Python Workers: checks availability and keywords every twenty minutes, keeps recent history in Workers KV and alerts Slack.",
++  "website": "https://monitor.owaspblt.org/"
++}
+diff --git a/blt-netguardian-client/.forkmesh/info.json b/blt-netguardian-client/.forkmesh/info.json
+new file mode 100644
+index 0000000000..f25b5e752d
+--- /dev/null
++++ b/blt-netguardian-client/.forkmesh/info.json
+@@ -0,0 +1,4 @@
++{
++  "name": "BLT-NetGuardian-Client",
++  "about": "Flutter client for BLT NetGuardian: queue and track security scan tasks, register targets and review discovered vulnerabilities."
++}
+diff --git a/blt-newsletter/.forkmesh/info.json b/blt-newsletter/.forkmesh/info.json
+new file mode 100644
+index 0000000000..9103e8f48c
+--- /dev/null
++++ b/blt-newsletter/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Newsletter",
++  "about": "OWASP BLT newsletter platform: a Python Cloudflare Worker with D1 storage, an admin dashboard for subscribers and campaigns, and SendGrid delivery.",
++  "website": "https://newsletter.owaspblt.org/"
++}
+diff --git a/blt-nexus/.forkmesh/info.json b/blt-nexus/.forkmesh/info.json
+new file mode 100644
+index 0000000000..34261bc90c
+--- /dev/null
++++ b/blt-nexus/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Nexus",
++  "about": "Directory of security projects connected to OWASP BLT and the BLT ambassadors who represent them.",
++  "website": "https://nexus.owaspblt.org/"
++}
+diff --git a/blt-owasp-bumper/.forkmesh/info.json b/blt-owasp-bumper/.forkmesh/info.json
+new file mode 100644
+index 0000000000..412b3f9991
+--- /dev/null
++++ b/blt-owasp-bumper/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-OWASP-Bumper",
++  "about": "Daily-generated dashboard of every repository in the OWASP GitHub organization, with activity sparklines and project metadata.",
++  "website": "https://bumper.owaspblt.org/"
++}
+diff --git a/blt-owasp-metadata/.forkmesh/info.json b/blt-owasp-metadata/.forkmesh/info.json
+new file mode 100644
+index 0000000000..80614631da
+--- /dev/null
++++ b/blt-owasp-metadata/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-OWASP-Metadata",
++  "about": "Collects and standardizes metadata for OWASP projects and chapters from the front matter of their index.md files, with a browsable dashboard.",
++  "website": "https://metadata.owaspblt.org/"
++}
+diff --git a/blt-owasp-wich/.forkmesh/info.json b/blt-owasp-wich/.forkmesh/info.json
+new file mode 100644
+index 0000000000..379da0cb5a
+--- /dev/null
++++ b/blt-owasp-wich/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-OWASP-Wich",
++  "about": "Browser-based checker that scores a GitHub repository against 100 OWASP compliance points in 10 categories.",
++  "website": "https://wich.owaspblt.org/"
++}
+diff --git a/blt-panini/.forkmesh/info.json b/blt-panini/.forkmesh/info.json
+new file mode 100644
+index 0000000000..b984bea8a3
+--- /dev/null
++++ b/blt-panini/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Panini",
++  "about": "Static site that shows apps banned by countries around the world, as a searchable list and an interactive map.",
++  "website": "https://panini.owaspblt.org/"
++}
+diff --git a/blt-preflight/.forkmesh/info.json b/blt-preflight/.forkmesh/info.json
+new file mode 100644
+index 0000000000..048e7a513f
+--- /dev/null
++++ b/blt-preflight/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Preflight",
++  "about": "Advisory tool that gives contributors security guidance and risk notes before they open a pull request; it advises and never blocks.",
++  "website": "https://preflight.owaspblt.org/"
++}
+diff --git a/blt-profiles/.forkmesh/info.json b/blt-profiles/.forkmesh/info.json
+new file mode 100644
+index 0000000000..165a2f54d3
+--- /dev/null
++++ b/blt-profiles/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Profiles",
++  "about": "Git-native directory of profiles for security professionals, researchers, mentors, students and open-source contributors.",
++  "website": "https://profiles.owaspblt.org/"
++}
+diff --git a/blt-rewards/.forkmesh/info.json b/blt-rewards/.forkmesh/info.json
+new file mode 100644
+index 0000000000..cf0a067594
+--- /dev/null
++++ b/blt-rewards/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Rewards",
++  "about": "BACON (Blockchain Assisted Contribution Network): Bitcoin Runes and Solana token rewards for open-source contributions.",
++  "website": "https://rewards.owaspblt.org/"
++}
+diff --git a/blt-safecloak/.forkmesh/info.json b/blt-safecloak/.forkmesh/info.json
+new file mode 100644
+index 0000000000..4833a0adc6
+--- /dev/null
++++ b/blt-safecloak/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-SafeCloak",
++  "about": "Privacy-focused peer-to-peer video and voice chat on Cloudflare Workers, with AI-assisted notes and explicit consent management.",
++  "website": "https://safecloak.owaspblt.org/"
++}
+diff --git a/blt-sizzle/.forkmesh/info.json b/blt-sizzle/.forkmesh/info.json
+new file mode 100644
+index 0000000000..f0f4f4041b
+--- /dev/null
++++ b/blt-sizzle/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Sizzle",
++  "about": "Async daily check-ins for organization teams: members post progress and blockers, admins see participation without another meeting.",
++  "website": "https://sizzle.owaspblt.org/"
++}
+diff --git a/blt-timer-flutter/.forkmesh/info.json b/blt-timer-flutter/.forkmesh/info.json
+new file mode 100644
+index 0000000000..16937b4174
+--- /dev/null
++++ b/blt-timer-flutter/.forkmesh/info.json
+@@ -0,0 +1,4 @@
++{
++  "name": "BLT-Timer-Flutter",
++  "about": "Linux desktop activity tracker in Flutter: counts keyboard and mouse activity through a native X11 library and shows live charts and daily summaries, keeping raw input private."
++}
+diff --git a/blt-toasty/.forkmesh/info.json b/blt-toasty/.forkmesh/info.json
+new file mode 100644
+index 0000000000..f1583f0f54
+--- /dev/null
++++ b/blt-toasty/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Toasty",
++  "about": "AI triage and responsible-disclosure assistant for BLT on Cloudflare Workers: redacts PII and secrets, detects duplicate reports and summarizes them.",
++  "website": "https://toasty.owaspblt.org/"
++}
+diff --git a/blt-tomato/.forkmesh/info.json b/blt-tomato/.forkmesh/info.json
+new file mode 100644
+index 0000000000..1c8547a4e9
+--- /dev/null
++++ b/blt-tomato/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Tomato",
++  "about": "OWASP project management scripts and the funding site that lists OWASP projects seeking funding through a funding.yml file.",
++  "website": "https://tomato.owaspblt.org/"
++}
+diff --git a/blt-university/.forkmesh/info.json b/blt-university/.forkmesh/info.json
+new file mode 100644
+index 0000000000..7af496b3ac
+--- /dev/null
++++ b/blt-university/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-University",
++  "about": "Open-source cybersecurity learning site: short courses, browser-based security labs and recent vulnerability data, with progress kept in the browser.",
++  "website": "https://university.owaspblt.org/"
++}
+diff --git a/blt-waypoint/.forkmesh/info.json b/blt-waypoint/.forkmesh/info.json
+new file mode 100644
+index 0000000000..63b35985df
+--- /dev/null
++++ b/blt-waypoint/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "BLT-Waypoint",
++  "about": "Live dashboard of the OWASP BLT projects: commits, issues, pull requests and live site of every folder in this monorepo.",
++  "website": "https://waypoint.owaspblt.org/"
++}
+diff --git a/coderabbit/.forkmesh/info.json b/coderabbit/.forkmesh/info.json
+new file mode 100644
+index 0000000000..e25470ad0a
+--- /dev/null
++++ b/coderabbit/.forkmesh/info.json
+@@ -0,0 +1,4 @@
++{
++  "name": "coderabbit",
++  "about": "Placeholder carried over from the old GitLab group: it holds only a license and has no code or configuration yet."
++}
+diff --git a/my-gsoc-tool/.forkmesh/info.json b/my-gsoc-tool/.forkmesh/info.json
+new file mode 100644
+index 0000000000..00e255bd1d
+--- /dev/null
++++ b/my-gsoc-tool/.forkmesh/info.json
+@@ -0,0 +1,5 @@
++{
++  "name": "MY-GSOC-TOOL",
++  "about": "Dashboard for Google Summer of Code students that gathers their GitHub contributions, blog posts, mentor feedback and milestones on one page.",
++  "website": "https://gsoc-tool.owaspblt.org/"
++}
+diff --git a/scripts/readme/update_readme.py b/scripts/readme/update_readme.py
+index 4063eae6ff..2ab98e2069 100644
+--- a/scripts/readme/update_readme.py
++++ b/scripts/readme/update_readme.py
+@@ -15,6 +15,7 @@ download for the contributor wall; cached results and existing avatars are reuse
+ """
+ 
+ import html
++import json
+ import os
+ import re
+ import subprocess
+@@ -32,15 +33,11 @@ README = os.path.join(ROOT, "README.md")
+ ROUTES = os.path.join(ROOT, "scripts", "routing", "projects.tsv")
+ HOME = "https://git.owaspblt.org/BLT"
+ SKIP_DIRS = {"scripts", "docs", ".github"}
+-# For folders whose README has no usable opening paragraph
++# For folders whose README has no usable opening paragraph and that have no .forkmesh/info.json
+ DESCRIPTIONS = {
+     "blt-action": "GitHub Action that automates issue and pull request management: self-assignment, unassignment of stale issues and contributor prompts.",
+     "blt-autopatch": "Automated patching: proposes fixes for detected security issues.",
+-    "blt-lettuce": "Slack bot for the OWASP BLT community: welcome messages, project discovery and contributor help.",
+     "blt-sammich": "Slack bot for the OWASP BLT community: GitHub activity, contributor stats, reminders and project discovery.",
+-    "blt-tomato": "OWASP project management scripts and the OWASP project funding site.",
+-    "blt-toasty": "AI triage and responsible-disclosure assistant for BLT, running on Cloudflare Workers.",
+-    "coderabbit": "Shared CodeRabbit AI review configuration for BLT projects.",
+     "dot_github": "Organization profile README and the scripts that refresh its blog posts and contributor wall.",
+ }
+ 
+@@ -83,6 +80,20 @@ def describe(readme_text):
+     return ""
+ 
+ 
++def folder_info(path):
++    """{about, website} strings from <folder>/.forkmesh/info.json (the forge's folder About box), or {}."""
++    try:
++        with open(os.path.join(path, ".forkmesh", "info.json"), encoding="utf-8") as handle:
++            info = json.load(handle)
++    except (OSError, ValueError):
++        return {}
++    if not isinstance(info, dict):
++        return {}
++    fields = {"about": info.get("about") or info.get("description"),
++              "website": info.get("website") or info.get("homepage")}
++    return {k: " ".join(v.split()) for k, v in fields.items() if isinstance(v, str) and v.strip()}
++
++
+ def display_names():
+     """Folder -> URL name (e.g. blt-leaf -> BLT-Leaf), from scripts/routing/projects.tsv."""
+     names = {}
+@@ -106,9 +117,11 @@ def projects_section():
+             if os.path.exists(os.path.join(path, name)):
+                 text = open(os.path.join(path, name), encoding="utf-8", errors="replace").read()
+                 break
++        info = folder_info(path)
+         live = re.search(r"\*\*Live Site:\*\*\s*\[(https://[^\]]+)\]", text)
+-        live_cell = f"[{live.group(1).split('//')[1].rstrip('/')}]({live.group(1)})" if live else ""
+-        desc = (DESCRIPTIONS.get(slug) or describe(text)).replace("|", "\\|")
++        site = live.group(1) if live else info.get("website", "")
++        live_cell = f"[{site.split('//')[1].rstrip('/')}]({site})" if site.startswith("https://") else ""
++        desc = (info.get("about") or DESCRIPTIONS.get(slug) or describe(text)).replace("|", "\\|")
+         rows.append(f"| [{names.get(slug, slug)}]({HOME}/{names.get(slug, slug)}) | {desc} | {live_cell} |")
+     return "## 📦 Projects\n\n" + "\n".join(rows)
+ 
