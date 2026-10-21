@@ -4,7 +4,7 @@ number: 4
 title: Fixed dark mode presistence in auth pages
 base: main
 head: khush173:fix/dark-mode-auth-pages
-status: open
+status: closed
 ts: 1792574073
 author: khvPCMyOyVupN4XgVA35Kb_L2gWJn-SZhzmfDyRk_GI
 authorName: khush173
