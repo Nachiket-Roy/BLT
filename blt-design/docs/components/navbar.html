@@ -3,17 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" href="/docs/assets/img/favicon.png" type="image/png" />
+    <link rel="icon" href="/docs/assets/img/blt-design.svg" type="image/svg+xml" />
     <title>Navbar | BLT Design Guide</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      tailwind.config = { theme: { extend: { fontFamily: { sans: ['Manrope', 'system-ui', 'sans-serif'] } } } };
+      tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'], mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'] } } } };
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <script src="../assets/js/theme.js"></script>
+    <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
     <link rel="stylesheet" href="../assets/css/blt-design.css" />
   </head>
   <body class="min-h-screen font-sans text-slate-900 antialiased">
@@ -33,20 +31,20 @@
           <h3 class="text-base font-semibold">Full Logo Navbar</h3>
           <nav class="mt-3 rounded-lg border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-4">
             <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
-              <img data-asset-src="assets/img/logo-lg.png" alt="BLT Logo" class="inline w-[15%]" />
+              <img data-asset-src="assets/img/blt-logo.svg" alt="OWASP BLT" class="inline h-8 w-8" />
               <div class="flex items-center gap-3">
                 <a href="#" class="text-sm text-slate-600 hover:text-slate-900">Docs</a>
                 <a href="#" class="text-sm text-slate-600 hover:text-slate-900">Issues</a>
-                <button class="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#c10000]">Submit Report</button>
+                <button class="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700">Submit Report</button>
               </div>
             </div>
           </nav>
           <pre class="mt-3 overflow-x-auto rounded-lg border border-slate-700 bg-slate-900 p-3 text-xs text-slate-200"><code>&lt;nav class="rounded-xl border border-slate-200 bg-white px-4 py-3"&gt;
-  &lt;img src="/docs/assets/img/logo-lg.png" alt="BLT Logo" class="w-[15%]" /&gt;
+  &lt;img src="/docs/assets/img/blt-logo.svg" alt="OWASP BLT" class="h-8 w-8" /&gt;
   &lt;div class="flex items-center gap-3"&gt;
     &lt;a href="#" class="text-sm text-slate-600 hover:text-slate-900"&gt;Docs&lt;/a&gt;
     &lt;a href="#" class="text-sm text-slate-600 hover:text-slate-900"&gt;Issues&lt;/a&gt;
-    &lt;button class="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-[#c10000]"&gt;Submit Report&lt;/button&gt;
+    &lt;button class="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"&gt;Submit Report&lt;/button&gt;
   &lt;/div&gt;
 &lt;/nav&gt;</code></pre>
         </section>
@@ -57,10 +55,10 @@
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
               <div class="flex h-16 items-center justify-between">
                 <div class="flex items-center">
-                  <img data-asset-src="assets/img/logo-sm.png" alt="BLT Small Logo" class="mr-2 h-8 w-8" />
+                  <img data-asset-src="assets/img/blt-logo.svg" alt="OWASP BLT" class="mr-2 h-8 w-8" />
                   <h1 class="text-xl font-bold text-gray-900" id="nav-title">BLT-Navbar</h1>
                 </div>
-                <a class="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-[#c10000]" href="https://git.owaspblt.org/BLT" target="_blank" rel="noopener noreferrer">
+                <a class="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700" href="https://git.owaspblt.org/BLT" target="_blank" rel="noopener noreferrer">
                   <i class="fa-solid fa-code-branch mr-2" aria-hidden="true"></i>Contribute
                 </a>
               </div>
@@ -69,10 +67,10 @@
           <pre class="mt-3 overflow-x-auto rounded-lg border border-slate-700 bg-slate-900 p-3 text-xs text-slate-200"><code>&lt;nav class="rounded-lg border border-slate-200 bg-white shadow-sm"&gt;
   &lt;div class="flex h-16 items-center justify-between px-4"&gt;
     &lt;div class="flex items-center"&gt;
-      &lt;img src="/docs/assets/img/logo-sm.png" alt="BLT Small Logo" class="mr-2 h-8 w-8" /&gt;
+      &lt;img src="/docs/assets/img/blt-logo.svg" alt="OWASP BLT" class="mr-2 h-8 w-8" /&gt;
       &lt;h1 class="text-xl font-bold text-gray-900"&gt;BLT-Navbar&lt;/h1&gt;
     &lt;/div&gt;
-    &lt;a href="https://git.owaspblt.org/BLT" class="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-[#c10000]"&gt;
+    &lt;a href="https://git.owaspblt.org/BLT" class="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700"&gt;
       &lt;i class="fa-solid fa-code-branch mr-2"&gt;&lt;/i&gt;Contribute
     &lt;/a&gt;
   &lt;/div&gt;
