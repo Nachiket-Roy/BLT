@@ -1,0 +1,24 @@
+diff --git a/blt-next/src/pages/login.html b/blt-next/src/pages/login.html
+index 7fd6810f0d..9bca982c71 100644
+--- a/blt-next/src/pages/login.html
++++ b/blt-next/src/pages/login.html
+@@ -26,6 +26,7 @@
+       },
+     };
+   </script>
++  <script src="../assets/js/theme-init.js"></script>
+   <script src="../assets/js/main.js" type="module" defer></script>
+   <style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
+ </head>
+diff --git a/blt-next/src/pages/signup.html b/blt-next/src/pages/signup.html
+index 3b3a6a26c9..51f4f78825 100644
+--- a/blt-next/src/pages/signup.html
++++ b/blt-next/src/pages/signup.html
+@@ -26,6 +26,7 @@
+       },
+     };
+   </script>
++  <script src="../assets/js/theme-init.js"></script>
+   <script src="../assets/js/main.js" type="module" defer></script>
+   <style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
+ </head>
