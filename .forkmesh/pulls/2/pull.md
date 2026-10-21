@@ -4,7 +4,7 @@ number: 2
 title: Folder info.json for 37 projects whose README fallback reads badly; blt-cron logo
 base: main
 head: fix/assign-owner-and-cards
-status: open
+status: closed
 ts: 1792547067
 author: 1kXvKSoCbQgnrUj0GtVHoNO9NhuTemR-LDDTK1tDs7U
 authorName: donnieblt
