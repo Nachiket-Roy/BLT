@@ -1,5 +1,5 @@
 diff --git a/blt-newsletter/public/dashboard.html b/blt-newsletter/public/dashboard.html
-index 7008b7a8b8..6ed5b46c72 100644
+index 7008b7a8b8..bb2f5238c7 100644
 --- a/blt-newsletter/public/dashboard.html
 +++ b/blt-newsletter/public/dashboard.html
 @@ -328,14 +328,13 @@
@@ -19,55 +19,82 @@ index 7008b7a8b8..6ed5b46c72 100644
            position: fixed;
            inset: 0;
            background: rgba(0, 0, 0, 0.5);
-@@ -348,9 +347,9 @@
+@@ -348,10 +347,10 @@
            height: 100vh;
            background-color: var(--surface-light);
          }
 -        body.px-8 {
 -          padding-left: 1rem;
 -          padding-right: 1rem;
-+        div.px-8.pt-8 {
-+          padding-left: 3.5rem !important;
-+          padding-right: 1rem !important;
-         }
+-        }
++        #page-title-container {
++        padding-left: 3.5rem;
++        padding-right: 1rem;
++      }
  
          .card {
-@@ -370,11 +369,13 @@
-       <a href="/dashboard" aria-current="page">Dashboard</a>
-       <a href="/docs">Docs</a>
-       <button id="admin-avatar-initials" type="button" slot="actions" title="Signed-in admin">…</button>
-+      
+           margin-bottom: 1rem;
+@@ -373,9 +372,10 @@
        <button type="button" slot="actions" onclick="logout()">Logout</button>
      </blt-nav>
      <!-- Dashboard Shell -->
-     <div id="dashboard-shell" class="flex min-h-0 flex-1 overflow-hidden">
+-    <div id="dashboard-shell" class="flex min-h-0 flex-1 overflow-hidden">
++    <div id="dashboard-shell" class="relative flex min-h-0 flex-1 overflow-hidden">
        <!-- Sidebar -->
-+      <button type="button" onclick="document.querySelector('.sidebar').classList.toggle('active')" class="md:hidden fixed top-16 left-3 z-[60] bg-white border rounded-lg p-2 shadow"><i class="fa-solid fa-bars"></i></button>
-       <aside class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
+-      <aside class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
++      <button type="button" id="sidebar-toggle" aria-label="Open navigation" aria-controls="dashboard-sidebar" aria-expanded="false" class="md:hidden absolute top-3 left-3 z-[60] bg-white border rounded-lg p-2 shadow"><i class="fa-solid fa-bars"></i></button>
++      <aside id="dashboard-sidebar" class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
          <div class="sidebar-content p-6 flex flex-col h-full" style="color: var(--text-primary-light);">
            <div class="flex items-center gap-2 mb-8">
-@@ -1309,7 +1310,14 @@
+             <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-white shadow-sm">
+@@ -429,7 +429,7 @@
+         <!-- Pages Container -->
+         <div class="flex-1 overflow-y-auto">
+           <!-- Page title (set by navigateTo) -->
+-          <div class="px-8 pt-8">
++          <div id="page-title-container" class="px-8 pt-8">
+             <h1 id="page-title" class="text-xl font-semibold" style="color: var(--text-primary-light);">Overview</h1>
+             <p id="page-desc" class="text-sm" style="color: var(--text-muted-light);">Monitor newsletter health and activity</p>
+           </div>
+@@ -1309,7 +1309,31 @@
                      <td colspan="${colspan}" class="text-center text-gray-500 py-8">${escapeHtml(message)}</td>
                    </tr>`;
        }
--
++      document.getElementById('sidebar-toggle').addEventListener('click', function() {
++        const sidebar = document.getElementById('dashboard-sidebar');
++        const isActive = sidebar.classList.toggle('active');
++        this.setAttribute('aria-expanded', isActive);
++      });
++
 +      document.addEventListener('click', function(e) {
-+        const sidebar = document.querySelector('.sidebar');
-+        const toggleBtn = document.querySelector('button[class*="md:hidden"]');
++        const sidebar = document.getElementById('dashboard-sidebar');
++        const toggleBtn = document.getElementById('sidebar-toggle');
 +        if (!sidebar.classList.contains('active')) return;
 +        if (sidebar.contains(e.target) && e.target.closest('.sidebar-content')) return;
-+        if (toggleBtn && toggleBtn.contains(e.target)) return;
++        if (toggleBtn.contains(e.target)) return;
 +        sidebar.classList.remove('active');
++        toggleBtn.setAttribute('aria-expanded', 'false');
++      });
+ 
++      document.addEventListener('keydown', function(e) {
++        if (e.key === 'Escape') {
++          const sidebar = document.getElementById('dashboard-sidebar');
++          if (sidebar.classList.contains('active')) {
++            sidebar.classList.remove('active');
++            document.getElementById('sidebar-toggle').setAttribute('aria-expanded', 'false');
++          }
++        }
 +      });
        function navigateTo(page) {
          document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
          document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
-@@ -1341,6 +1349,9 @@
+@@ -1341,6 +1365,10 @@
          setText('page-title', titles[page] || 'Overview');
          setText('page-desc', descs[page] || 'Monitor newsletter health and activity');
          currentPage = page;
 +        if (window.innerWidth < 768) {
-+          document.querySelector('.sidebar').classList.remove('active');
++          document.getElementById('dashboard-sidebar').classList.remove('active');
++          document.getElementById('sidebar-toggle').setAttribute('aria-expanded', 'false');
 +        }
        }
  
