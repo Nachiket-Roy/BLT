@@ -4,7 +4,7 @@ number: 8
 title: blt-toasty: notify Slack when Toasty finishes triage (#35)
 base: main
 head: dahahanish:issue-35-blt-toasty-build-slack-notification-bot
-status: open
+status: deleted
 ts: 1792693620
 author: EqNbJ81Ib7tk86tkz55_EDo4gCk4z8HvrLf8ewzPc5c
 authorName: dahahanish
