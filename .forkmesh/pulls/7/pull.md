@@ -4,7 +4,7 @@ number: 7
 title: blt-docs: use pull request instead of merge request and add blt-cron to project map
 base: main
 head: hrinkar01:docs/pr-terminology-blt-cron
-status: open
+status: merged
 ts: 1792649680
 author: RstIDDJG6C6U1Pai9khxpJmAfEPyL4aIsmU-ctc0kJM
 authorName: hrinkar01
@@ -12,6 +12,9 @@ sig: snVUa5VY4IlPmvf3AbO-X9xsF660Ivkdp0ydZEsaPhCbnelJvT2j9EJIlp7qhDdZaqROvlLcByt
 aiModel: Gemini
 headBaseOid: 067cb2ac4e41075de7759cf1b9a843c63ff98a46
 headOid: dc3d9545caa6c6dd702b6bca5a18638d5703724b
+mergeBase: 71e6714cbd9c43ef4fcb99e37ccb688b0adcc3a2
+mergeHead: dc3d9545caa6c6dd702b6bca5a18638d5703724b
+mergedAt: 1792652207834
 ---
 
 Fixes #186
