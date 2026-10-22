@@ -1,12 +1,13 @@
 diff --git a/blt-newsletter/public/dashboard.html b/blt-newsletter/public/dashboard.html
-index 7008b7a8b8..bb2f5238c7 100644
+index 7008b7a8b8..e9a10c3375 100644
 --- a/blt-newsletter/public/dashboard.html
 +++ b/blt-newsletter/public/dashboard.html
-@@ -328,14 +328,13 @@
+@@ -328,14 +328,14 @@
          background: linear-gradient(to right, #10b981, #34d399);
          transition: width 300ms ease;
        }
 -
++      
        @media (max-width: 768px) {
          .sidebar {
 -          display: none;
@@ -19,7 +20,7 @@ index 7008b7a8b8..bb2f5238c7 100644
            position: fixed;
            inset: 0;
            background: rgba(0, 0, 0, 0.5);
-@@ -348,10 +347,10 @@
+@@ -348,10 +348,10 @@
            height: 100vh;
            background-color: var(--surface-light);
          }
@@ -34,7 +35,7 @@ index 7008b7a8b8..bb2f5238c7 100644
  
          .card {
            margin-bottom: 1rem;
-@@ -373,9 +372,10 @@
+@@ -373,9 +373,10 @@
        <button type="button" slot="actions" onclick="logout()">Logout</button>
      </blt-nav>
      <!-- Dashboard Shell -->
@@ -47,7 +48,7 @@ index 7008b7a8b8..bb2f5238c7 100644
          <div class="sidebar-content p-6 flex flex-col h-full" style="color: var(--text-primary-light);">
            <div class="flex items-center gap-2 mb-8">
              <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-white shadow-sm">
-@@ -429,7 +429,7 @@
+@@ -429,7 +430,7 @@
          <!-- Pages Container -->
          <div class="flex-1 overflow-y-auto">
            <!-- Page title (set by navigateTo) -->
@@ -56,7 +57,7 @@ index 7008b7a8b8..bb2f5238c7 100644
              <h1 id="page-title" class="text-xl font-semibold" style="color: var(--text-primary-light);">Overview</h1>
              <p id="page-desc" class="text-sm" style="color: var(--text-muted-light);">Monitor newsletter health and activity</p>
            </div>
-@@ -1309,7 +1309,31 @@
+@@ -1309,7 +1310,31 @@
                      <td colspan="${colspan}" class="text-center text-gray-500 py-8">${escapeHtml(message)}</td>
                    </tr>`;
        }
@@ -88,7 +89,7 @@ index 7008b7a8b8..bb2f5238c7 100644
        function navigateTo(page) {
          document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
          document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
-@@ -1341,6 +1365,10 @@
+@@ -1341,6 +1366,10 @@
          setText('page-title', titles[page] || 'Overview');
          setText('page-desc', descs[page] || 'Monitor newsletter health and activity');
          currentPage = page;
