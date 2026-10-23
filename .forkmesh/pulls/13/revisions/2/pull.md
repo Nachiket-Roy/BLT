@@ -1,0 +1,44 @@
+---
+schema: forkmesh-pull-v1
+number: 13
+title: blt-vanish: rename remaining SelfErase references to BLT Vanish
+base: main
+head: pr/vanshika2720/vanish-selferase-rename
+status: open
+ts: 1792786588
+author: Cu6HYOAI_KXF_0n4il24bXIniH5dBGJ0ELffhPIkLLQ
+authorName: vanshika2720
+sig: xsJWe9EEeQNNLHIVk3I03gM-5KELrBYkYBF8IKazUHkWuBzyHEGKxTxg-hTsevYRO9D4pjs5wl5Ey-EIRa4hDA
+aiModel: None
+headBaseOid: f90ae89fe33e7527961e68a88cdedf336e1e1c68
+headOid: b5d0d6ee681467a923756bf0e69b4227bc0ea7b0
+syncedHeadOid: 511322f9a8a6aa88844b490293be4fd6c9989c33
+revision: 2
+creationBaseOid: adcea056cc55f7789374ed5c1dbead26c85725bd
+creationHeadOid: 511322f9a8a6aa88844b490293be4fd6c9989c33
+---
+
+## Summary
+
+This PR completes the remaining branding rename from **SelfErase** to **BLT Vanish**, ensuring the application and its documentation consistently use the current product name.
+
+## Changes made
+
+- Updated `blt-vanish/README.md` to reflect the BLT Vanish branding.
+- Updated `blt-vanish/data/schema.json` to remove outdated user-facing branding while preserving the schema structure.
+- Renamed the Flutter application class from `SelfEraseApp` to `BLTVanishApp` and updated the relevant references.
+- Reviewed related project files for remaining outdated branding and updated applicable references.
+
+## Testing
+
+- Checked the repository for remaining `SelfErase` references.
+- Verified relevant imports and application entry-point references.
+- Ran the applicable formatting, analysis, and test checks where available.
+
+## Scope
+
+This is a branding and consistency cleanup. It does not intentionally change application functionality or introduce new features.
+
+The changes address the remaining rename work described in issue #36.
+
+**Related issue:** #36 - Follow-up from "feat: add macOS platform build configuration"
