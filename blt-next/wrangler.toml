@@ -12,7 +12,6 @@ binding = "ASSETS"
 # Environment variables (set production values in Cloudflare dashboard or override in [env.*])
 [vars]
 ALLOWED_ORIGIN = "http://localhost"  # Override in production via Cloudflare dashboard
-BLT_API_URL = "https://api.owaspblt.org"  # Source of leaderboard data
 # ENVIRONMENT = "production"
 
 # Secrets (set via wrangler secret put)

@@ -173,6 +173,14 @@ def avatar_initials(username):
         return parts[0][:2].upper()
     return (parts[0][0] + parts[1][0]).upper()
 
+
+def _safe_int(value, default=0):
+    """int(value), or default when value is missing or not a number (BLT-API data is not trusted)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
 # ===================================
 # Route Handlers
 # ===================================
@@ -681,7 +689,7 @@ async def fetch_leaderboard(env):
     status, payload = await call_blt_api(env, 'GET', f'/leaderboard?per_page={LEADERBOARD_PAGE_SIZE}')
     if status != 200 or not isinstance(payload, dict):
         raise RuntimeError(f"BLT-API returned {status}")
-    entries = payload.get('data') or []
+    entries = [entry for entry in (payload.get('data') or []) if isinstance(entry, dict)]
     total = (payload.get('pagination') or {}).get('total', len(entries))
     return entries, total
 
@@ -712,13 +720,13 @@ async def handle_leaderboard(request, env=None):
             origin=origin,
         )
 
-    rows = f'<div id="leaderboard-meta" data-total="{int(total)}" hidden></div>'
+    rows = f'<div id="leaderboard-meta" data-total="{_safe_int(total, len(entries))}" hidden></div>'
     for idx, item in enumerate(entries):
         rank = idx + 1
         raw_username = str(item.get('username') or 'unknown')
         username = html_escape(raw_username)
         initials = html_escape(avatar_initials(raw_username))
-        points = int(item.get('total_score') or 0)
+        points = _safe_int(item.get('total_score'))
         color = AVATAR_COLORS[idx % len(AVATAR_COLORS)]
         if rank == 1:
             rank_cell = '<div class="text-center"><i class="fa-solid fa-crown text-yellow-400 text-sm" aria-hidden="true"></i></div>'
