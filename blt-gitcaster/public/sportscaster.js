@@ -946,16 +946,28 @@ class GitHubSportscaster {
             });
         }
 
-        document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
+       document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
             chip.addEventListener('click', () => {
-                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => c.classList.remove('active'));
+                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
+                    c.classList.remove('active');
+                    c.setAttribute('aria-pressed', 'false');
+                });
                 chip.classList.add('active');
+                chip.setAttribute('aria-pressed', 'true');
                 this.eventTypeFilter = chip.dataset.type;
             });
         });
 
         document.querySelectorAll('.preset-chips [data-preset]').forEach(chip => {
             chip.addEventListener('click', () => {
+                // If these preset chips also toggle pressed states:
+                document.querySelectorAll('.preset-chips [data-preset]').forEach(c => {
+                    c.classList.remove('active');
+                    c.setAttribute('aria-pressed', 'false');
+                });
+                chip.classList.add('active');
+                chip.setAttribute('aria-pressed', 'true');
+
                 const preset = chip.dataset.preset;
                 const presetData = GitHubSportscaster.PRESET_CHANNELS[preset];
                 if (presetData && presetData.orgs.length > 0 && scopeType && scopeValueGroup) {
@@ -1013,9 +1025,17 @@ class GitHubSportscaster {
                 if (scopeValueGroup) scopeValueGroup.style.display = 'none';
                 const githubTokenEl = document.getElementById('github-token');
                 if (githubTokenEl) githubTokenEl.value = '';
-                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => c.classList.remove('active'));
+                
+                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
+                    c.classList.remove('active');
+                    c.setAttribute('aria-pressed', 'false');
+                });
                 const allChip = document.querySelector('#event-type-filters .preset-chip[data-type="all"]');
-                if (allChip) allChip.classList.add('active');
+                if (allChip) {
+                    allChip.classList.add('active');
+                    allChip.setAttribute('aria-pressed', 'true');
+                }
+                
                 this.saveConfig();
                 this.resetData();
                 this.fetchActivity();
@@ -1046,8 +1066,12 @@ class GitHubSportscaster {
     setupChannelFilters() {
         document.querySelectorAll('.channel-pill').forEach(pill => {
             pill.addEventListener('click', () => {
-                document.querySelectorAll('.channel-pill').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.channel-pill').forEach(p => {
+                    p.classList.remove('active');
+                    p.setAttribute('aria-pressed', 'false');
+                });
                 pill.classList.add('active');
+                pill.setAttribute('aria-pressed', 'true');
                 this.currentChannel = pill.dataset.channel;
                 this.render();
             });

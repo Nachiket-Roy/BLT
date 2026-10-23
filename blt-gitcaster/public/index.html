@@ -1251,7 +1251,7 @@
             font-style: italic;
             word-break: break-word;
         }
-    </style>
+   </style>
     <link rel="stylesheet" href="_brand/blt-dark.css">
     <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
 </head>
@@ -1319,23 +1319,27 @@
         </div>
 
         <div class="config-group">
-            <label>Filter by Event Types</label>
-            <div class="preset-chips" id="event-type-filters">
-                <span class="preset-chip active" data-type="all"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>All Events</span>
-                <span class="preset-chip" data-type="PushEvent"><i class="fa-solid fa-upload" aria-hidden="true"></i>Push</span>
-                <span class="preset-chip" data-type="PullRequestEvent"><i class="fa-solid fa-code-pull-request" aria-hidden="true"></i>PR</span>
-                <span class="preset-chip" data-type="IssuesEvent"><i class="fa-solid fa-bug" aria-hidden="true"></i>Issues</span>
-                <span class="preset-chip" data-type="WatchEvent"><i class="fa-solid fa-star" aria-hidden="true"></i>Stars</span>
-                <span class="preset-chip" data-type="ForkEvent"><i class="fa-solid fa-code-fork" aria-hidden="true"></i>Forks</span>
-                <span class="preset-chip" data-type="ReleaseEvent"><i class="fa-solid fa-rocket" aria-hidden="true"></i>Release</span>
+            <label id="event-type-label">Filter by Event Types</label>
+            <div class="preset-chips" id="event-type-filters" role="group" aria-labelledby="event-type-label">
+                <button type="button" class="preset-chip active" data-type="all" aria-pressed="true"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>All Events</button>
+                <button type="button" class="preset-chip" data-type="PushEvent" aria-pressed="false"><i class="fa-solid fa-upload" aria-hidden="true"></i>Push</button>
+                <button type="button" class="preset-chip" data-type="PullRequestEvent" aria-pressed="false"><i class="fa-solid fa-code-pull-request" aria-hidden="true"></i>PR</button>
+                <button type="button" class="preset-chip" data-type="IssuesEvent" aria-pressed="false"><i class="fa-solid fa-bug" aria-hidden="true"></i>Issues</button>
+                <button type="button" class="preset-chip" data-type="WatchEvent" aria-pressed="false"><i class="fa-solid fa-star" aria-hidden="true"></i>Stars</button>
+                <button type="button" class="preset-chip" data-type="ForkEvent" aria-pressed="false"><i class="fa-solid fa-code-fork" aria-hidden="true"></i>Forks</button>
+                <button type="button" class="preset-chip" data-type="ReleaseEvent" aria-pressed="false"><i class="fa-solid fa-rocket" aria-hidden="true"></i>Release</button>
             </div>
         </div>
 
         <div class="config-group">
             <label for="ai-api-url">AI Commentary API (OpenAI-compatible)</label>
             <input type="text" id="ai-api-url" placeholder="https://api.openai.com/v1/chat/completions" value="">
-            <input type="text" id="ai-api-key" placeholder="API Key (stored locally)" style="margin-top: 8px;">
-            <select id="ai-model" style="margin-top: 8px;">
+            
+            <label for="ai-api-key" style="margin-top: 8px; display: block;">AI API Key</label>
+            <input type="password" id="ai-api-key" placeholder="API Key (stored locally)" autocomplete="off" style="margin-top: 4px;">
+            
+            <label for="ai-model" style="margin-top: 8px; display: block;">AI Model</label>
+            <select id="ai-model" style="margin-top: 4px;">
                 <option value="gpt-4o-mini">gpt-4o-mini</option>
                 <option value="gpt-4o">gpt-4o</option>
                 <option value="o3-mini">o3-mini</option>
@@ -1352,12 +1356,12 @@
         </div>
 
         <div class="config-group">
-            <label>Preset Channels</label>
-            <div class="preset-chips">
-                <span class="preset-chip" data-preset="trending"><i class="fa-solid fa-fire" aria-hidden="true"></i>Trending</span>
-                <span class="preset-chip" data-preset="web"><i class="fa-solid fa-globe" aria-hidden="true"></i>Web Dev</span>
-                <span class="preset-chip" data-preset="ai"><i class="fa-solid fa-brain" aria-hidden="true"></i>AI/ML</span>
-                <span class="preset-chip" data-preset="devops"><i class="fa-solid fa-gears" aria-hidden="true"></i>DevOps</span>
+            <label id="preset-channels-label">Preset Channels</label>
+            <div class="preset-chips" role="group" aria-labelledby="preset-channels-label">
+                <button type="button" class="preset-chip" data-preset="trending" aria-pressed="false"><i class="fa-solid fa-fire" aria-hidden="true"></i>Trending</button>
+                <button type="button" class="preset-chip" data-preset="web" aria-pressed="false"><i class="fa-solid fa-globe" aria-hidden="true"></i>Web Dev</button>
+                <button type="button" class="preset-chip" data-preset="ai" aria-pressed="false"><i class="fa-solid fa-brain" aria-hidden="true"></i>AI/ML</button>
+                <button type="button" class="preset-chip" data-preset="devops" aria-pressed="false"><i class="fa-solid fa-gears" aria-hidden="true"></i>DevOps</button>
             </div>
         </div>
 
@@ -1396,12 +1400,12 @@
             </div>
 
             <!-- Channel Filters -->
-            <div class="channel-filters" id="channel-filters">
-                <span class="channel-filters-label"><i class="fa-solid fa-tv" aria-hidden="true"></i> Channels</span>
-                <span class="channel-pill active" data-channel="all"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>All Activity <span class="count" id="all-count">0</span></span>
-                <span class="channel-pill" data-channel="hot"><i class="fa-solid fa-fire" aria-hidden="true"></i>Hot <span class="count" id="hot-count">0</span></span>
-                <span class="channel-pill" data-channel="code"><i class="fa-solid fa-code" aria-hidden="true"></i>Code <span class="count" id="code-count">0</span></span>
-                <span class="channel-pill" data-channel="social"><i class="fa-solid fa-users" aria-hidden="true"></i>Social <span class="count" id="social-count">0</span></span>
+            <div class="channel-filters" id="channel-filters" role="group" aria-labelledby="channel-filters-label">
+                <span id="channel-filters-label" class="channel-filters-label"><i class="fa-solid fa-tv" aria-hidden="true"></i> Channels</span>
+                <button type="button" class="channel-pill active" data-channel="all" aria-pressed="true"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>All Activity <span class="count" id="all-count">0</span></button>
+                <button type="button" class="channel-pill" data-channel="hot" aria-pressed="false"><i class="fa-solid fa-fire" aria-hidden="true"></i>Hot <span class="count" id="hot-count">0</span></button>
+                <button type="button" class="channel-pill" data-channel="code" aria-pressed="false"><i class="fa-solid fa-code" aria-hidden="true"></i>Code <span class="count" id="code-count">0</span></button>
+                <button type="button" class="channel-pill" data-channel="social" aria-pressed="false"><i class="fa-solid fa-users" aria-hidden="true"></i>Social <span class="count" id="social-count">0</span></button>
             </div>
 
             <!-- Sportscaster Announcement Section -->
