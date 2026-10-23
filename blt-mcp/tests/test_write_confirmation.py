@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import blt_mcp.server  # noqa: F401  (registers the tools)
-from blt_mcp import server_base, v2_tools
+from blt_mcp import server_base
 from blt_mcp.server_base import mcp
 
 WRITE_TOOLS = {
@@ -52,8 +52,6 @@ def http(monkeypatch):
     for method in ("get", "post", "patch", "put", "delete", "request"):
         setattr(client, method, AsyncMock(return_value=response))
     monkeypatch.setattr(server_base, "http_client", client)
-    # v2_tools binds the client at import time, so it has to be replaced separately.
-    monkeypatch.setattr(v2_tools, "http_client", client)
     return client
 
 
@@ -106,3 +104,23 @@ async def test_malformed_confirmation_is_rejected(tool, http):
     with pytest.raises(Exception, match="confirmed"):
         await mcp.call_tool(tool, args)
     assert _requests_made(http) == 0
+
+
+V2_WRITE_TOOLS = sorted(WRITE_TOOLS - {"submit_issue", "add_comment"})
+
+
+@pytest.mark.parametrize("tool", V2_WRITE_TOOLS)
+async def test_v2_tools_use_the_client_created_at_startup(tool, monkeypatch):
+    """Regression: v2 tools once kept the import-time client (None) instead of the one the lifespan creates."""
+    monkeypatch.setattr(server_base, "http_client", None)
+    args = {**_minimal_args((await _schemas())[tool]), "confirmed": True}
+    with pytest.raises(Exception, match="HTTP client is not initialized"):
+        await mcp.call_tool(tool, args)
+
+
+async def test_v2_write_works_after_the_server_lifespan_starts():
+    async with server_base.server_lifespan(mcp):
+        assert server_base.http_client is not None
+        result = await mcp.call_tool("create_bug", {"title": "t", "description": "d", "confirmed": True})
+    assert "Successfully created bug: t" in str(result)
+    assert server_base.http_client is not None and server_base.http_client.is_closed
