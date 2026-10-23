@@ -1,13 +1,13 @@
-From a5933cb42c015fba367142ba3efbe092601ff2ff Mon Sep 17 00:00:00 2001
+From a6cd1f1fb4d05468785d0e98a8e24487915f5360 Mon Sep 17 00:00:00 2001
 From: Navodit-Sahai <sahainavodit781@gmail.com>
-Date: Fri, 23 Oct 2026 12:17:44 +0530
+Date: Sat, 24 Oct 2026 01:34:17 +0530
 Subject: [PATCH] Fix day-of-week range parsing for values ending in 7; allow
  CRLF in wrangler.toml test
 
 ---
  blt-cron/src/cron.js       | 10 +++++++---
- blt-cron/test/cron.test.js |  7 +++++--
- 2 files changed, 12 insertions(+), 5 deletions(-)
+ blt-cron/test/cron.test.js | 13 +++++++++++--
+ 2 files changed, 18 insertions(+), 5 deletions(-)
 
 diff --git a/blt-cron/src/cron.js b/blt-cron/src/cron.js
 index 379b9ee70e..7b9ee4e84a 100644
@@ -43,7 +43,7 @@ index 379b9ee70e..7b9ee4e84a 100644
      weekdayAny: fields[4] === "*",
    };
 diff --git a/blt-cron/test/cron.test.js b/blt-cron/test/cron.test.js
-index 7c8416bf2c..a597ce846f 100644
+index 7c8416bf2c..558f3581aa 100644
 --- a/blt-cron/test/cron.test.js
 +++ b/blt-cron/test/cron.test.js
 @@ -14,8 +14,8 @@ test("every job's cron parses", () => {
@@ -57,13 +57,19 @@ index 7c8416bf2c..a597ce846f 100644
  });
  
  test("cron matching", () => {
-@@ -27,6 +27,9 @@ test("cron matching", () => {
+@@ -27,6 +27,15 @@ test("cron matching", () => {
    assert.ok(cronMatches("0 9 * * 1-5", at("2026-10-19T09:00:00Z")));
    assert.ok(!cronMatches("0 9 * * 1-5", at("2026-10-18T09:00:00Z")));
    assert.ok(cronMatches("0 0 * * 7", at("2026-10-18T00:00:00Z")));
 +  assert.ok(cronMatches("0 0 * * 1-7", at("2026-10-18T00:00:00Z")));
 +  assert.ok(cronMatches("0 0 * * 5-7", at("2026-10-18T00:00:00Z")));
 +  assert.ok(cronMatches("0 0 * * */7", at("2026-10-18T00:00:00Z")));
++  // 2026-10-19 is a Monday, not a Sunday — these should NOT match a range ending in 7
++  assert.ok(!cronMatches("0 0 * * 5-7", at("2026-10-19T00:00:00Z")));
++  assert.ok(!cronMatches("0 0 * * */7", at("2026-10-19T00:00:00Z")));
++  // 0 and 7 are aliases for Sunday, not two separate weekday values
++  assert.deepEqual(parseCron("0 0 * * 1-7").weekday, new Set([0, 1, 2, 3, 4, 5, 6]));
++  assert.deepEqual(parseCron("0 0 * * 5-7").weekday, new Set([0, 5, 6]));
    assert.ok(cronMatches("30 1 1,15 * *", at("2026-10-15T01:30:00Z")));
    assert.throws(() => parseCron("* * * *"));
    assert.throws(() => parseCron("61 * * * *"));

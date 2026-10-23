@@ -5,13 +5,16 @@ title: Fix day-of-week range parsing to allow values ending in 7
 base: main
 head: navodit:blt-cron/fix-day-of-week-range
 status: open
-ts: 1792742068
+ts: 1792785937
 author: FTSqIIVcAz6yrEUfHk8wm1rr_FLa2bBVWJKeRKZCwcQ
 authorName: navodit
-sig: pPWr7OuLG_TyYOTHN8KziSCwWw0_yZnAHtpJVLmLUBf_Xm0XivvKVsqFUZwXderz9-cUF8ChspynrjotaVqFDA
+sig: gDm90m9ezU1yYhLnIsU48bFsqk5CrtakuBcJqPtu5vjNblhW2Jr9T_bP5gUy6FjdYbJRJMfym1LjB-5TzhOLDw
 aiModel: Claude Sonnet 5
-headBaseOid: 7ed248c33b4db37817b44289331437c1af590221
-headOid: a9df321fa09f8e087984ad238cc19424c0c7ffc4
+headBaseOid: a8e09d5480a36498976b4b3676529bd97f398187
+headOid: 0a05462934dd9f0ced27e86671edeaaba01abcdb
+revision: 2
+creationBaseOid: a8e09d5480a36498976b4b3676529bd97f398187
+creationHeadOid: a6cd1f1fb4d05468785d0e98a8e24487915f5360
 ---
 
 Fixes #52

@@ -32,7 +32,7 @@ index 379b9ee70e..7b9ee4e84a 100644
      weekdayAny: fields[4] === "*",
    };
 diff --git a/blt-cron/test/cron.test.js b/blt-cron/test/cron.test.js
-index 7c8416bf2c..a597ce846f 100644
+index 7c8416bf2c..558f3581aa 100644
 --- a/blt-cron/test/cron.test.js
 +++ b/blt-cron/test/cron.test.js
 @@ -14,8 +14,8 @@ test("every job's cron parses", () => {
@@ -46,13 +46,19 @@ index 7c8416bf2c..a597ce846f 100644
  });
  
  test("cron matching", () => {
-@@ -27,6 +27,9 @@ test("cron matching", () => {
+@@ -27,6 +27,15 @@ test("cron matching", () => {
    assert.ok(cronMatches("0 9 * * 1-5", at("2026-10-19T09:00:00Z")));
    assert.ok(!cronMatches("0 9 * * 1-5", at("2026-10-18T09:00:00Z")));
    assert.ok(cronMatches("0 0 * * 7", at("2026-10-18T00:00:00Z")));
 +  assert.ok(cronMatches("0 0 * * 1-7", at("2026-10-18T00:00:00Z")));
 +  assert.ok(cronMatches("0 0 * * 5-7", at("2026-10-18T00:00:00Z")));
 +  assert.ok(cronMatches("0 0 * * */7", at("2026-10-18T00:00:00Z")));
++  // 2026-10-19 is a Monday, not a Sunday — these should NOT match a range ending in 7
++  assert.ok(!cronMatches("0 0 * * 5-7", at("2026-10-19T00:00:00Z")));
++  assert.ok(!cronMatches("0 0 * * */7", at("2026-10-19T00:00:00Z")));
++  // 0 and 7 are aliases for Sunday, not two separate weekday values
++  assert.deepEqual(parseCron("0 0 * * 1-7").weekday, new Set([0, 1, 2, 3, 4, 5, 6]));
++  assert.deepEqual(parseCron("0 0 * * 5-7").weekday, new Set([0, 5, 6]));
    assert.ok(cronMatches("30 1 1,15 * *", at("2026-10-15T01:30:00Z")));
    assert.throws(() => parseCron("* * * *"));
    assert.throws(() => parseCron("61 * * * *"));
