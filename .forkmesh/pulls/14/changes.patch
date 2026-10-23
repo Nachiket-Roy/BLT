@@ -1,0 +1,266 @@
+diff --git a/blt-api/src/__init__.py b/blt-api/src/__init__.py
+index 4138b5ecc5..32a0f9820d 100644
+--- a/blt-api/src/__init__.py
++++ b/blt-api/src/__init__.py
+@@ -17,7 +17,7 @@ from .handlers import (
+     handle_leaderboard,
+     handle_contributors,
+     handle_repos,
+-    handle_health,
++    make_health_handler,
+     handle_signup,
+     handle_signin,
+     handle_verify_email,
+@@ -36,7 +36,7 @@ __all__ = [
+     "handle_leaderboard",
+     "handle_contributors",
+     "handle_repos",
+-    "handle_health",
++    "make_health_handler",
+     "handle_signup",
+     "handle_signin",
+     "handle_verify_email",
+diff --git a/blt-api/src/handlers/__init__.py b/blt-api/src/handlers/__init__.py
+index edd215b2a2..0a0dfb224d 100644
+--- a/blt-api/src/handlers/__init__.py
++++ b/blt-api/src/handlers/__init__.py
+@@ -17,7 +17,7 @@ from .contributors import handle_contributors
+ from .repos import handle_repos
+ from .jobs import handle_jobs
+ from .hackathons import handle_hackathons
+-from .health import handle_health
++from .health import make_health_handler
+ from .homepage import handle_blt_api_logo, handle_blt_api_logo_svg, handle_dashboard, handle_homepage, handle_llm_txt
+ from .auth_page import handle_auth_page
+ from .auth import handle_api_keys, handle_signup, handle_signin, handle_verify_email, handle_verify_local
+@@ -36,7 +36,7 @@ __all__ = [
+     "handle_repos",
+     "handle_jobs",
+     "handle_hackathons",
+-    "handle_health",
++    "make_health_handler",
+     "handle_blt_api_logo",
+     "handle_blt_api_logo_svg",
+     "handle_llm_txt",
+diff --git a/blt-api/src/handlers/health.py b/blt-api/src/handlers/health.py
+index bcfe5767c2..2be637e642 100644
+--- a/blt-api/src/handlers/health.py
++++ b/blt-api/src/handlers/health.py
+@@ -2,42 +2,62 @@
+ Health check handler.
+ """
+ 
+-from typing import Any, Dict
++from typing import Any, Dict,Callable
+ from workers import Response
++from router import Router
+ 
+ 
+-async def handle_health(
+-    request: Any,
+-    env: Any,
+-    path_params: Dict[str, str],
+-    query_params: Dict[str, str],
+-    path: str
+-) -> Any:
++
++
++def make_health_handler(router: Router) -> Callable:
+     """
+-    Handle health check requests.
+-    
+-    Returns API status and version information.
++    Create a routes handler with access to the router instance.
++
++    This factory pattern avoids circular imports by accepting the router
++    as a parameter rather than importing it from main.
++
++    Args:
++        router: The Router instance to query for registered routes
++
++    Returns:
++        An async handler function for the /routes endpoint
+     """
+-    return Response.json({
+-        "status": "healthy",
+-        "api": "BLT API",
+-        "version": "1.0.0",
+-        "documentation": "/docs",
+-        "endpoints": {
+-            "bugs": "/bugs",
+-            "users": "/users",
+-            "domains": "/domains",
+-            "organizations": "/organizations",
+-            "projects": "/projects",
+-            "hunts": "/hunts",
+-            "stats": "/stats",
+-            "leaderboard": "/leaderboard",
+-            "contributors": "/contributors",
+-            "repos": "/repos"
+-        },
+-        "links": {
+-            "github": "https://git.owaspblt.org/BLT/BLT-Core",
+-            "website": "https://owaspblt.org",
+-            "documentation": "https://git.owaspblt.org/BLT/BLT-API"
+-        }
+-    })
++    async def handle_health(
++        request: Any,
++        env: Any,
++        path_params: Dict[str, str],
++        query_params: Dict[str, str],
++        path: str
++    ) -> Any:
++        """
++        Handle health check requests.
++
++        Returns API status and version information.
++        """
++
++        routes = router.get_route_list()
++        endpoints = {}
++        registered_paths = {route["path"] for route in routes}
++        for route in routes:
++            route_path = route["path"]
++            if route_path.startswith("/v2"):
++                continue
++            segment = route_path.strip("/").split("/")[0]
++            candidate = f"/{segment}"
++            if segment and segment not in ("", "{id}") and candidate in registered_paths:
++                endpoints[segment] = candidate
++
++        return Response.json({
++            "status": "healthy",
++            "api": "BLT API",
++            "version": "1.0.0",
++            "documentation": "/dashboard",
++            "endpoints": endpoints,
++            "links": {
++                "github": "https://git.owaspblt.org/BLT/BLT-Core",
++                "website": "https://owaspblt.org",
++                "documentation": "https://git.owaspblt.org/BLT/BLT-API"
++            }
++        })
++
++    return handle_health
+diff --git a/blt-api/src/main.py b/blt-api/src/main.py
+index ca281644e6..80e2992d47 100644
+--- a/blt-api/src/main.py
++++ b/blt-api/src/main.py
+@@ -29,7 +29,7 @@ from handlers import (
+     handle_repos,
+     handle_jobs,
+     handle_hackathons,
+-    handle_health,
++    make_health_handler,
+     handle_blt_api_logo,
+     handle_blt_api_logo_svg,
+     handle_llm_txt,
+@@ -66,7 +66,7 @@ _add_route("GET", "/blt-api.svg", handle_blt_api_logo_svg)
+ _add_route("GET", "/llm.txt", handle_llm_txt)
+ _add_route("GET", "/dashboard", handle_dashboard)
+ _add_route("GET", "/auth", handle_auth_page)
+-_add_route("GET", "/health", handle_health)
++_add_route("GET", "/health", make_health_handler(router))
+ 
+ # Bugs API
+ _add_route("GET", "/bugs/search", handle_bugs)
+@@ -155,7 +155,7 @@ def _add_v2_route(method: str, pattern: str, handler) -> None:
+ 
+ 
+ # v2 API routes (backward compatible with existing unversioned API routes)
+-_add_v2_route("GET", "/health", handle_health)
++_add_v2_route("GET", "/health", make_health_handler(router))
+ 
+ _add_v2_route("GET", "/bugs/search", handle_bugs)
+ _add_v2_route("GET", "/bugs", handle_bugs)
+diff --git a/blt-api/tests/test_health.py b/blt-api/tests/test_health.py
+new file mode 100644
+index 0000000000..261974656a
+--- /dev/null
++++ b/blt-api/tests/test_health.py
+@@ -0,0 +1,83 @@
++"""
++Tests for the BLT API health check handler.
++"""
++
++import importlib
++import sys
++import types
++from pathlib import Path
++
++import pytest
++
++# Add src to path for imports to work
++sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
++
++from router import Router
++from handlers.health import make_health_handler
++
++
++class MockRequest:
++    """Mock request object for testing."""
++
++    def __init__(self, url="https://blt-api.workers.dev/health"):
++        self.url = url
++        self.method = "GET"
++
++
++class MockEnv:
++    """Mock environment object for testing."""
++    pass
++
++
++class TestHealthHandler:
++    """Tests for the /health endpoint."""
++
++    @pytest.mark.asyncio
++    async def test_health_returns_expected_status_fields(self):
++        router = Router()
++        handler = make_health_handler(router)
++
++        response = await handler(
++            MockRequest(),
++            MockEnv(),
++            path_params={},
++            query_params={},
++            path="/health",
++        )
++
++        import json
++        body = json.loads(response.body)
++        assert body["status"] == "healthy"
++        assert body["api"] == "BLT API"
++        assert body["documentation"] == "/dashboard"
++
++    @pytest.mark.asyncio
++    async def test_health_every_listed_endpoint_is_a_registered_route(self, monkeypatch):
++        previous_workers = sys.modules.get("workers")
++        workers_mod = types.ModuleType("workers")
++
++        class WorkerEntrypoint:
++            pass
++
++        setattr(workers_mod, "WorkerEntrypoint", WorkerEntrypoint)
++        with monkeypatch.context() as patch_context:
++            patch_context.setitem(sys.modules, "workers", workers_mod)
++            main = importlib.reload(sys.modules["main"]) if "main" in sys.modules else importlib.import_module("main")
++
++            registered_paths = {route.pattern for route in main.router.routes}
++
++            handler = make_health_handler(main.router)
++            response = await handler(
++                MockRequest(),
++                MockEnv(),
++                path_params={},
++                query_params={},
++                path="/health",
++            )
++
++            import json
++            body = json.loads(response.body)
++            for name, endpoint_path in body["endpoints"].items():
++                assert endpoint_path in registered_paths, f"{name} -> {endpoint_path} is not a registered route"
++
++        assert sys.modules.get("workers") is previous_workers
+\ No newline at end of file
