@@ -5,13 +5,16 @@ title: blt-mcp: enforce strict plain-text output for draft_vision_issue
 base: main
 head: pr/vanshika2720/blt-mcp-vision-prompt
 status: open
-ts: 1792791561
+ts: 1792791576
 author: Cu6HYOAI_KXF_0n4il24bXIniH5dBGJ0ELffhPIkLLQ
 authorName: vanshika2720
-sig: 8wiYNECjExUD36YWqCth3IM_jAQxWrQPk1Ry-8NggTmbsb1TQYBLbgKISgsno-S4SFpiMXQjYCBuGUpiSfaLBQ
+sig: laoysf-mDuS-qybZUi6mNtQPvlN700ykfvtkFzwA7acWt1dlDNGqN0aeUQD9KcGMvG3KXMQiktfC4RlZ24j0Cw
 aiModel: None
-headBaseOid: f7733a40ae9c1e2f0be04c4b49072476e1748f55
-headOid: bb09e6d9e2cd106ce101a7e266a96eb47ee33562
+headBaseOid: adcea056cc55f7789374ed5c1dbead26c85725bd
+headOid: 72dc51fe405724ca658e4e23bf19f0d299155a48
+revision: 2
+creationBaseOid: adcea056cc55f7789374ed5c1dbead26c85725bd
+creationHeadOid: b5a3e67e7b208b978f1b29803a837236915abfcf
 ---
 
 ## Summary
