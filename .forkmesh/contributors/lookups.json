@@ -1,9 +1,13 @@
 {
  "forge": {
   "authors": [
-   "donnieblt"
+   "donnieblt",
+   "khush173",
+   "navodit",
+   "psamuelvijay",
+   "vanshika2720"
   ],
-  "checked": "2026-10-20"
+  "checked": "2026-10-22"
  },
  "github_email": {
   "00beb61bb0c7efa4": {
@@ -170,6 +174,10 @@
    "checked": "2026-10-18",
    "login": null
   },
+  "c32d11754742e331": {
+   "checked": "2026-10-22",
+   "login": "hrinkar01"
+  },
   "c8fc11071dce33e5": {
    "checked": "2026-10-18",
    "login": null
@@ -177,6 +185,10 @@
   "ca26eabfc529569d": {
    "checked": "2026-10-18",
    "login": "Prachi9506"
+  },
+  "cd23089cc8eefea1": {
+   "checked": "2026-10-21",
+   "login": "psamuelvijay"
   },
   "d1fb828a48ef4a1e": {
    "checked": "2026-10-18",
@@ -663,6 +675,11 @@
    "id": 151057784,
    "login": "Himanshu-639"
   },
+  "hrinkar01": {
+   "checked": "2026-10-22",
+   "id": 170418968,
+   "login": "hrinkar01"
+  },
   "hsay123": {
    "checked": "2026-10-20",
    "id": 166712262,
@@ -1054,6 +1071,11 @@
    "checked": "2026-10-18",
    "id": 146115505,
    "login": "Pritz395"
+  },
+  "psamuelvijay": {
+   "checked": "2026-10-21",
+   "id": 225240660,
+   "login": "psamuelvijay"
   },
   "py-huang": {
    "checked": "2026-10-18",
@@ -1838,6 +1860,10 @@
    "checked": "2026-10-18",
    "exists": false
   },
+  "hrinkar01": {
+   "checked": "2026-10-22",
+   "exists": false
+  },
   "hsay123": {
    "checked": "2026-10-20",
    "exists": false
@@ -2140,6 +2166,10 @@
   },
   "pritz395": {
    "checked": "2026-10-18",
+   "exists": false
+  },
+  "psamuelvijay": {
+   "checked": "2026-10-21",
    "exists": false
   },
   "py-huang": {

@@ -49,7 +49,8 @@
     return {
       href: a.getAttribute("href"),
       name: ($("strong", a) || a).textContent.trim(),
-      logo: img ? img.getAttribute("src") : "",
+      // the project's own round symbol (no wasp), as the shared top bar shows it
+      symbol: img ? img.getAttribute("src") : "",
       group: a.closest(".explore-group").getAttribute("data-group"),
     };
   });
@@ -68,7 +69,7 @@
       var a = el("a", "group flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3 transition-colors hover:bg-red-50/80 dark:hover:bg-gray-800");
       a.href = p.href;
       var img = el("img", "h-10 w-10 object-contain transition-transform group-hover:scale-105");
-      img.src = p.logo;
+      img.src = p.symbol;
       img.alt = "";
       img.width = 40;
       img.height = 40;
@@ -132,7 +133,7 @@
       node.style.top = (item.y / size) * 100 + "%";
       node.style.animationDelay = (i % 5) * -0.7 + "s";
       var img = el("img");
-      img.src = item.p.logo;
+      img.src = item.p.symbol;
       img.alt = "";
       img.loading = "lazy";
       node.appendChild(img);

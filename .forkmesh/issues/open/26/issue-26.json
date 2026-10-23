@@ -1,7 +1,5 @@
 {
-    "assignees": [
-        "navodit"
-    ],
+    "assignees": [],
     "author": "s_63h0z_rn9tGX5c93aI9sgKHb1iJO4JwP9NvPMuXsE",
     "authorName": "gitlab-import[bot]",
     "bountyAddress": "",
@@ -118,6 +116,50 @@
             "sig": "HB2M1wwD0P9aMrvw9k_h0Q9z95Q-Dfwnwwl7dgoCK3VpzNtsjavq_omSbDsVnt0ggTdQ08tUJh4o_c95HnIhCA",
             "ts": 1792554578270,
             "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "FTSqIIVcAz6yrEUfHk8wm1rr_FLa2bBVWJKeRKZCwcQ",
+            "authorName": "navodit",
+            "authorVerified": true,
+            "body": "/unassign",
+            "id": "comment-web-1792735632998",
+            "sig": "0evWLJvg4qdsv9T3f5VYq-WjscXh4kKqa_9Hl9Jc7eED1rwa-7d2I8bJOqa8MYIeY3vZySyTeF0vrbDl4gaMBg",
+            "ts": 1792735632998,
+            "type": "comment"
+        },
+        {
+            "assignee": "navodit",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "actions-1792735653740-Dy-ABb4b",
+            "sig": "gMfvIyJRoYFVUxjVu5DmEKb4Qcb-uV-d_Qm-ZDT3Vk3PG9fJqyBkA_pM64q4vUUHDirvEo-VFpQYpmpjZ6wiAQ",
+            "ts": 1792735653740,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@navodit you're unassigned from this issue. It's open for others now; comment `/assign` to take it again. \u003c!-- blt-assign:5f80b713dade80bdac20 --\u003e",
+            "id": "actions-1792735653842-4TyK2gHg",
+            "sig": "Gxy5zArz9O6-ZJ0xrj-iNVuj5_Rc_OpePuQsahGnN6TY1uPCaHvBbwvkhdZYnVOi0VEgC6PZvSWx2p4I-Az4CA",
+            "ts": 1792735653842,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "FTSqIIVcAz6yrEUfHk8wm1rr_FLa2bBVWJKeRKZCwcQ",
+            "authorName": "navodit",
+            "authorVerified": true,
+            "body": "PR raised #5 and it is approved also.",
+            "id": "comment-web-1792735729435",
+            "sig": "JI6iM9wwmEkydStNSh9IOTK-7tnvy0TOIgPTEfbLN80dAdZU2n0CcfD7FYRGt8oQS0Ah-_dErLWcLrSrzLAEBw",
+            "ts": 1792735729435,
+            "type": "comment"
         }
     ],
     "labels": [
@@ -132,6 +174,6 @@
     "startDate": 0,
     "status": "open",
     "title": "blt-newsletter: fix: mobile responsiveness",
-    "updatedAt": 1792554578270,
+    "updatedAt": 1792735729435,
     "votes": 0
 }

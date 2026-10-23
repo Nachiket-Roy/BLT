@@ -31,7 +31,8 @@ export const REPO_KEY = "owasp-blt/blt"; // forkmesh-issue-event-v2 signing key:
 // BLT-Action blocks a new assignment while the user holds another open issue without an open pull
 // request, i.e. one unfinished issue at a time.
 export const MAX_OPEN_ASSIGNMENTS = 1;
-export const PR_DAYS = 7;
+// Also the stale-claim window of blt-action/forge/stale.mjs.
+export const PR_HOURS = 24;
 export const MAX_COMMANDS_PER_RUN = 10;
 // Spam guards. One refusal reply per person per day: further refused /assign comments get no reply.
 // More than COOLDOWN_MAX_ATTEMPTS /assign comments within COOLDOWN_WINDOW_MS puts the person on a
@@ -231,7 +232,8 @@ export function decide({ command, name, issue, others = [] }) {
     return {
       change: { assignees: [name] },
       reply:
-        `${who} you're assigned to this issue. Please open a pull request for it within ${PR_DAYS} days. ` +
+        `${who} you're assigned to this issue. Please open a pull request for it within ${PR_HOURS} hours. ` +
+        `Without a pull request or an update from you here for ${PR_HOURS} hours, you'll be unassigned (after a warning). ` +
         `If you stop working on it, comment \`/unassign\` so someone else can pick it up.`,
     };
   }

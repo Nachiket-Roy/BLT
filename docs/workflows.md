@@ -30,10 +30,11 @@ In the table, CF means `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, which
 
 | File | Source | Triggers | Secrets |
 | --- | --- | --- | --- |
-| `ci.yml` | GitHub `ci.yml` | push (any branch): `scripts/ci/test.sh --changed $FORKMESH_BEFORE`; dispatch input `projects` (default `all`) | none |
+| `ci.yml` | GitHub `ci.yml` | push (any branch): `scripts/ci/test.sh --changed $FORKMESH_BEFORE`; pull request into `main`: `--changed $FORKMESH_BASE_SHA` (the folders the pull request changes); dispatch input `projects` (default `all`) | none |
 | `deploy.yml` | new | push to main: `scripts/deploy.sh --changed $FORKMESH_BEFORE` (folders in `scripts/deploy/projects.tsv`); dispatch input `project` (a name, several space-separated, or `all`) | CF |
 | `readme.yml` | GitHub `readme.yml` | push to main (any path; Projects, Deploying and Contributors), `17 6 * * *` (also refreshes Blog Posts); commits `README.md` and `.forkmesh/contributors/` | `GH_API_TOKEN` (optional) |
 | `blt-action--assign.yml` | BLT-Action `/assign`, `/unassign` | issue comments (created) starting a line with `/assign` or `/unassign`; dispatch input `issue` (process the commands already in that issue). Verified authors only. Assigns through the job API (falls back to committing a signed ledger event on an older instance) and replies through the job API | `BLT_TASKS_SEED` (fallback only) |
+| `blt-action--unassign-stale.yml` | BLT-Action / BLT-Pool stale-assignment unassign | `53 * * * *` (hourly): warns, then releases, self-claimed issues with no pull request and no update from the assignee for 24 hours (see Stale claims). Job API only, no commit | none |
 | `blt-cve--build-index.yml` | GitHub | push to main under `blt-cve/public/cves`, `public/schema`, `scripts/build_index.py` | CF |
 | `blt-design-contest--build-showcase.yml` | GitLab `build_showcase` | issue events on contest issues (project label or `[blt-design-contest]` prefix, contest labels, `winner`), `47 7 * * *` (votes raise no issue event), push under `blt-design-contest/scripts/` or `data/`; reads the git.owaspblt.org issue ledger and writes changed pages to KV (`blt-design-contest/scripts/refresh-kv.sh`), no commit | CF (with KV write) |
 | `blt-extension--release.yml` | GitHub `release.yml` + packaging from `create-release.yml` | dispatch only (input `publish`) | `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET`, `CHROME_REFRESH_TOKEN` |
@@ -65,8 +66,9 @@ only:
 - `/assign` is refused when the issue is closed, when someone else is assigned, or when the commenter
   already holds another open issue (BLT-Action allowed one issue without an open pull request; the
   forge has no issue-to-pull link, so any other open assignment counts). Otherwise the commenter is
-  assigned and asked to open a pull request within 7 days or comment `/unassign`. Nothing unassigns
-  stale issues automatically.
+  assigned and asked to open a pull request within 24 hours or comment `/unassign`. A claim with no
+  pull request and no update for 24 hours is released by `blt-action--unassign-stale.yml` (Stale claims
+  below).
 - `/unassign` removes only the commenter.
 - Comments from bots (`[bot]`, `-actions`) are ignored.
 - Only a verified author counts. The forge sets an issue comment's author from the signed-in session
@@ -106,6 +108,28 @@ Setup: the platform needs the verified-author check and the job API assignees en
 before this workflow (otherwise every comment is refused as unverified). `BLT_TASKS_SEED` (the
 contents of `~/.config/blt/blt-tasks.seed`, base64url, or 64 hex characters, under the repository's
 Settings tab, "Actions secrets") is needed only for the fallback.
+
+### Stale claims
+
+BLT-Action is the only bot that answers `/assign` (issue #38). BLT-Pool (`blt-pool`, the
+`blt-github-app` Worker) ignores `/assign` and `/unassign`, and its 2-hourly blt-cron job, which swept
+every GitHub App installation for stale assignments on the frozen OWASP-BLT/* GitHub repositories, is
+gone. Its stale-assignment release is ported here as `blt-action/forge/stale.mjs`, run hourly by
+`blt-action--unassign-stale.yml`:
+
+- Only self-claims are released: claims made with `/assign` (recorded by the `-actions` bot or
+  `blt-tasks[bot]`) or with the web claim button by the assignee. An assignment a maintainer made for
+  someone else is left alone, as is an assignee with no claim event in the ledger.
+- The clock starts at the newest claim and restarts with each verified comment the assignee posts on
+  the issue. Bot comments (including the warning) do not restart it.
+- An assignee who has an open pull request, or opened any pull request after the claim, keeps the
+  issue (the forge has no issue-to-pull link, so any pull request by them counts). Pull requests are
+  read anonymously from the `forkmesh/pulls` ledger branch; when it cannot be read the run stops and
+  changes nothing.
+- After 18 quiet hours the assignee gets one warning (`<!-- blt-assign-stale-warning:<name>:<since> -->`).
+  At 24 hours, once that warning is at least 5 hours old, they are unassigned through the job API with
+  a reply saying so. At most 10 actions per run.
+- On an instance without the job API assignees endpoint the run stops; there is no ledger fallback.
 
 ### Schedules chosen for the GitLab jobs
 
@@ -286,6 +310,26 @@ this server:
 - `blt-safecloak` runs `playwright install --with-deps`, which needs sudo.
 
 Run these on a machine with the toolchain: `scripts/ci/test.sh <project>`.
+
+### Pull requests
+
+Every open pull request into `main` runs `ci.yml` on its newest commit, and the result shows on the
+pull request (Checks row and Checks tab) and in the Actions tab.
+
+- The workflow is always the one on `main`; edits to `.forkmesh/` in the pull request are not used.
+  A pull request that changes `.forkmesh/` waits for a maintainer even when its author is trusted.
+- Runs get no secrets, no job token and no push access. They run in the runner's sandbox like every
+  other job.
+- Runs start by themselves for maintainers (organization owners and writers) and for contributors a
+  maintainer marked with **Always run for @name** on a pull request. Everyone else's run waits:
+  a maintainer reads the change and presses **Approve and run** (that approval covers that commit
+  only; a new push needs a new approval). The author sees that nothing is needed from them.
+- Remove a contributor from the trusted list with **Stop running automatically** on the Checks tab of
+  one of their pull requests.
+
+CI is not a required check for merging. Required checks on this forge need signed results that the
+server's runner does not produce yet, and on the 1 GB server heavy suites (`blt-legacy`) and
+projects without a toolchain are skipped, so a green run is advice, not a gate.
 
 ## Not ported
 
