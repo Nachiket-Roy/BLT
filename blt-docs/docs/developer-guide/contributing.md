@@ -23,7 +23,7 @@ Older GitHub and GitLab repositories are read-only history or mirrors; don't ope
 
 ## Keep changes reviewable
 
-Prefer small, focused merge requests. A documentation change should usually cover one topic, one workflow, or one repository page.
+Prefer small, focused pull requests. A documentation change should usually cover one topic, one workflow, or one repository page.
 
 Avoid large rewrites unless maintainers have agreed on the scope first. If a larger cleanup is needed, split it into reviewable parts such as navigation changes, content rewrites, link updates, and follow-up corrections.
 
@@ -38,7 +38,7 @@ Avoid large rewrites unless maintainers have agreed on the scope first. If a lar
    uvx --with-requirements requirements.txt mkdocs build --strict
    ```
 
-5. Open a merge request with a summary of the change and the verification command you ran.
+5. Open a pull request with a summary of the change and the verification command you ran.
 
 ## Code contribution workflow
 
@@ -47,7 +47,7 @@ Use the setup, test, and deployment instructions from the repository that owns t
 For code changes:
 
 - Follow the repository-specific development setup.
-- Run the relevant tests before opening a merge request.
+- Run the relevant tests before opening a pull request.
 - Do not commit secrets, API keys, tokens, generated credentials, or local `.env` files.
 - Avoid changing unrelated files.
 - Keep generated output out of the commit unless the repository explicitly requires it.
@@ -62,6 +62,10 @@ For code changes:
 - [ ] Product and architecture claims are supported by current repository context.
 - [ ] `uvx --with-requirements requirements.txt mkdocs build --strict` passes.
 - [ ] Screenshots, diagrams, or assets are included only when they are needed and reviewed.
+
+## Using AI
+
+AI tools are welcome. Follow the [BLT AI Policy](https://git.owaspblt.org/BLT/blob/main/AI_POLICY.md): disclose the model you used in the pull request's AI model field, review and test everything, and keep secrets out of AI services. See also [Agentic development guidance](agentic-development.md).
 
 ## Communication
 

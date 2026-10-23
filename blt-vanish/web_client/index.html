@@ -10,11 +10,22 @@
     <meta property="og:description" content="Local-first. No server. Your data never leaves your device." />
     <meta property="og:type" content="website" />
     <title>BLT Vanish - OWASP Privacy Data Removal Tool</title>
-    <link rel="icon" type="image/png" href="./assets/blt-vanish-favicon.png" />
-    
+    <link rel="icon" type="image/svg+xml" href="./assets/blt-vanish-logo.svg" />
+
+    <script>
+        // Before first paint: the saved OWASP BLT theme (localStorage "theme"), else the system preference.
+        (function () {
+            var saved = null;
+            try { saved = localStorage.getItem("theme"); } catch (e) { saved = null; }
+            var dark = saved === "dark" || (saved !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+            document.documentElement.classList.toggle("dark", dark);
+        })();
+    </script>
+    <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
     <script>
         window.tailwind = window.tailwind || {};
         window.tailwind.config = {
+            darkMode: "class",
             theme: {
                 extend: {
                     colors: {
@@ -26,13 +37,14 @@
                     },
                     fontFamily: {
                         sans: [
-                            "Geist",
-                            "Inter",
                             "ui-sans-serif",
                             "system-ui",
                             "-apple-system",
                             "BlinkMacSystemFont",
                             "Segoe UI",
+                            "Roboto",
+                            "Helvetica Neue",
+                            "Arial",
                             "sans-serif",
                         ],
                         mono: [
@@ -54,21 +66,8 @@
         integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
         crossorigin="anonymous" referrerpolicy="no-referrer" />
     <style>
-        .mobile-menu.open {
-            display: flex;
-        }
-
-        .mobile-toggle.active span:nth-child(1) {
-            transform: translateY(6px) rotate(45deg);
-        }
-
-        .mobile-toggle.active span:nth-child(2) {
-            opacity: 0;
-        }
-
-        .mobile-toggle.active span:nth-child(3) {
-            transform: translateY(-6px) rotate(-45deg);
-        }
+        blt-nav:not(:defined) { display: block; min-height: 61px; }
+        blt-nav:not(:defined) > * { display: none; }
 
         .dot-field {
             background-image: radial-gradient(rgba(17, 24, 39, 0.18) 1px, transparent 1px);
@@ -379,72 +378,63 @@
             color: #6b7280;
             font-size: .875rem;
         }
+
+        /* Dark mode (html.dark, set by the OWASP BLT bar): gray-950 page, gray-900 cards. */
+        html.dark { color-scheme: dark; }
+        html.dark body { background-color: #030712; color: #f3f4f6; }
+        html.dark .bg-gray-50 { background-color: #030712; }
+        html.dark .bg-white,
+        html.dark .modal-content,
+        html.dark .broker-item { background-color: #111827; }
+        html.dark .bg-white\/90,
+        html.dark .bg-white\/95 { background-color: rgba(17, 24, 39, .9); }
+        html.dark .bg-white\/40 { background-color: rgba(17, 24, 39, .4); }
+        html.dark .bg-gray-100 { background-color: #1f2937; }
+        html.dark .bg-red-50 { background-color: rgba(127, 29, 29, .25); }
+        html.dark .bg-emerald-50 { background-color: rgba(6, 78, 59, .3); }
+        html.dark .text-gray-900,
+        html.dark .text-gray-800,
+        html.dark .broker-item h4,
+        html.dark .detail-section h4 { color: #f3f4f6; }
+        html.dark .text-gray-700,
+        html.dark .detail-section li { color: #d1d5db; }
+        html.dark .text-gray-600,
+        html.dark .text-gray-500,
+        html.dark .info-text,
+        html.dark .broker-item p { color: #9ca3af; }
+        html.dark .text-red-600 { color: #f87171; }
+        html.dark .text-emerald-700 { color: #6ee7b7; }
+        html.dark .border-gray-100,
+        html.dark .border-gray-200,
+        html.dark .border-black\/5,
+        html.dark .broker-item { border-color: #1f2937; }
+        html.dark .border-gray-300 { border-color: #374151; }
+        html.dark .border-red-200 { border-color: rgba(127, 29, 29, .6); }
+        html.dark .hover\:bg-gray-50:hover,
+        html.dark .hover\:bg-gray-100:hover { background-color: #1f2937; }
+        html.dark .hover\:text-gray-900:hover { color: #fff; }
+        html.dark .dot-field { background-image: radial-gradient(rgba(243, 244, 246, 0.14) 1px, transparent 1px); }
+        html.dark .feature-divider::before { background: linear-gradient(to right, transparent, #1f2937); }
+        html.dark .feature-divider::after { background: linear-gradient(to left, transparent, #1f2937); }
+        html.dark [class*="shadow-[inset_0_0_0_1px_rgba(17,24,39"] { box-shadow: inset 0 0 0 1px #1f2937; }
+        html.dark input,
+        html.dark select,
+        html.dark textarea { background-color: #030712; color: #f3f4f6; border-color: #374151; }
+        html.dark .close:hover { color: #fff; }
     </style>
 </head>
 
 <body
     class="min-h-screen overflow-x-hidden bg-gray-50 font-sans text-gray-900 antialiased selection:bg-red-100 selection:text-red-700">
 
-    <!-- ═══════════════════════════════════════════
-         HEADER / NAV 
-    ════════════════════════════════════════════ -->
-    <header class="fixed inset-x-0 top-0 z-50 border-b border-black/5 bg-white/90 backdrop-blur-[18px]"
-        id="site-header">
-        <div class="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4 max-md:px-4">
-            <a href="#" class="inline-flex items-center gap-2.5" aria-label="BLT Vanish home">
-                <img src="./assets/blt-vanish-logo.png" alt="BLT Vanish logo" class="h-10 sm:h-10">
-                <div class="flex flex-col">
-                    <span class="text-sm font-semibold tracking-tight">BLT Vanish</span>
-                    <span class="text-[0.65rem] text-gray-400 leading-none mt-0.5">Privacy Tool</span>
-                </div>
-            </a>
-
-            <nav class="hidden items-center gap-7 md:flex" aria-label="Primary navigation">
-                <a class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-                    href="#how-it-works">How it works</a>
-                <a class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-                    href="#app">App</a>
-                <a class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-                    href="#setup">Setup</a>
-                <a class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-                    href="#docs">Docs</a>
-                <a class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-                    href="https://git.owaspblt.org/BLT/BLT-Vanish" target="_blank" rel="noopener noreferrer">Source</a>
-            </nav>
-
-            <div class="hidden items-center gap-3 md:flex">
-                <a class="rounded-md px-3 py-2 text-sm text-gray-600 transition-colors duration-150 hover:bg-gray-100 hover:text-gray-900"
-                    href="#app">Launch app</a>
-                <a class="inline-flex items-center justify-center rounded-md border-b-[1.5px] border-red-700 bg-gradient-to-b from-red-500 to-red-600 px-4 py-2 text-sm font-medium text-white shadow-[0_10px_24px_-18px_rgba(220,38,38,.8)] transition duration-200 hover:-translate-y-px"
-                    href="https://git.owaspblt.org/BLT/BLT-Vanish" target="_blank" rel="noopener noreferrer">Try
-                    Vanish</a>
-            </div>
-
-            <button
-                class="mobile-toggle hidden h-8 w-8 cursor-pointer flex-col items-center justify-center gap-[5px] border-0 bg-transparent max-md:flex"
-                id="mobile-toggle" type="button" aria-label="Toggle menu" aria-expanded="false"
-                aria-controls="mobile-menu">
-                <span class="block h-px w-5 bg-gray-600 transition duration-200"></span>
-                <span class="block h-px w-5 bg-gray-600 transition duration-200"></span>
-                <span class="block h-px w-5 bg-gray-600 transition duration-200"></span>
-            </button>
-        </div>
-
-        <nav class="mobile-menu hidden flex-col gap-4 border-t border-gray-100 bg-white/95 px-6 py-4 backdrop-blur-md"
-            id="mobile-menu" aria-label="Mobile navigation">
-            <a class="text-sm text-gray-600 transition-colors hover:text-gray-900" href="#how-it-works">How it works</a>
-            <a class="text-sm text-gray-600 transition-colors hover:text-gray-900" href="#app">App</a>
-            <a class="text-sm text-gray-600 transition-colors hover:text-gray-900" href="#setup">Setup</a>
-            <a class="text-sm text-gray-600 transition-colors hover:text-gray-900" href="#docs">Docs</a>
-            <a class="text-sm text-gray-600 transition-colors hover:text-gray-900"
-                href="https://git.owaspblt.org/BLT/BLT-Vanish" target="_blank" rel="noopener noreferrer">Source</a>
-            <a class="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 transition duration-200 hover:border-gray-300 hover:bg-gray-50"
-                href="#app">Launch app</a>
-            <a class="inline-flex items-center justify-center rounded-md border-b-[1.5px] border-red-700 bg-gradient-to-b from-red-500 to-red-600 px-5 py-3 text-sm font-medium text-white transition duration-200 hover:-translate-y-px"
-                href="https://git.owaspblt.org/BLT/BLT-Vanish" target="_blank" rel="noopener noreferrer">Try
-                Vanish</a>
-        </nav>
-    </header>
+    <blt-nav project="blt-vanish" name="Vanish" data-sticky>
+        <a href="#how-it-works">How it works</a>
+        <a href="#app">App</a>
+        <a href="#setup">Setup</a>
+        <a href="#docs">Docs</a>
+        <a href="#app" slot="actions">Launch app</a>
+        <a href="https://git.owaspblt.org/BLT/BLT-Vanish" target="_blank" rel="noopener noreferrer" slot="actions" data-primary>Try Vanish</a>
+    </blt-nav>
 
     <main>
 
@@ -452,7 +442,7 @@
            HERO
       ════════════════════════════════════════════ -->
         <section
-            class="relative flex min-h-[43rem] items-start justify-center px-4 pb-14 pt-52 max-md:min-h-[38rem] max-md:pt-36"
+            class="relative flex min-h-[43rem] items-start justify-center px-4 pb-14 pt-32 max-md:min-h-[38rem] max-md:pt-16"
             aria-label="Hero">
             <div class="dot-field pointer-events-none absolute inset-x-0 top-24 z-[1] mx-auto h-[36rem] w-full opacity-70 md:w-[min(94rem,180vw)]"
                 aria-hidden="true"></div>
@@ -1114,28 +1104,6 @@ flutter run -d windows</code></pre>
     <!-- ═══════════════════════════════════════════
          SCRIPTS
     ════════════════════════════════════════════ -->
-    <script>
-        // Mobile nav toggle
-        (function () {
-            var mobileToggle = document.getElementById('mobile-toggle');
-            var mobileMenu = document.getElementById('mobile-menu');
-            if (mobileToggle && mobileMenu) {
-                mobileToggle.addEventListener('click', function () {
-                    var open = !mobileMenu.classList.contains('open');
-                    mobileMenu.classList.toggle('open', open);
-                    mobileToggle.classList.toggle('active', open);
-                    mobileToggle.setAttribute('aria-expanded', String(open));
-                });
-                mobileMenu.querySelectorAll('a').forEach(function (link) {
-                    link.addEventListener('click', function () {
-                        mobileMenu.classList.remove('open');
-                        mobileToggle.classList.remove('active');
-                        mobileToggle.setAttribute('aria-expanded', 'false');
-                    });
-                });
-            }
-        })();
-    </script>
     <script src="app.js"></script>
 </body>
 

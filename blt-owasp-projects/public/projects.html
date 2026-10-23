@@ -4,14 +4,15 @@
     <title>Project Matrix</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="theme-init.js"></script>
+    <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
     <link rel="stylesheet" href="https://cdn.datatables.net/1.10.25/css/jquery.dataTables.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.2.9/css/responsive.dataTables.min.css">
     <style>
         body {
             margin: 0;
             padding: 10px;
-            font-family: Arial, sans-serif;
-        }
+                    }
         
         th {
             position: sticky;
@@ -27,6 +28,10 @@
         @media screen and (max-width: 768px) {
             body {
                 padding: 5px;
+            }
+
+            blt-nav {
+                margin: -5px -5px 5px;
             }
             
             table.dataTable {
@@ -77,8 +82,15 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="blt-theme.css">
 </head>
 <body>
+    <blt-nav project="blt-owasp-projects" name="Projects" current="auto">
+        <a href="index.html">Projects</a>
+        <a href="projects.html">Repos</a>
+        <a href="issues.html">Issues</a>
+        <a href="https://git.owaspblt.org/BLT/BLT-OWASP-Projects" slot="actions" data-primary target="_blank" rel="noopener noreferrer">Source code</a>
+    </blt-nav>
     <table id="projects" class="display">
         <thead>
             <tr>

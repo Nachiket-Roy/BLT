@@ -18,23 +18,24 @@ GITHUB_PAGE_HTML = """\
   <meta name="description" content="BLT-Pool GitHub App for OWASP BLT. Automate issue assignment, leaderboard scoring, bug reporting, and contributor workflows.">
   <title>BLT-Pool GitHub App | OWASP BLT</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="/theme-init.js"></script>
+  <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
+  <link rel="stylesheet" href="/blt-pool-theme.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           colors: {
-            "blt-primary": "#E10101",
+            "blt-primary": "#dc2626",
             "blt-primary-hover": "#b91c1c",
             "blt-border": "#E5E5E5",
             "blt-dark-base": "#111827",
             "blt-dark-surface": "#1F2937"
           },
           fontFamily: {
-            sans: ["Plus Jakarta Sans", "ui-sans-serif", "system-ui", "sans-serif"]
+            sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif']
           },
           boxShadow: {
             "soft-red": "0 14px 40px rgba(225, 1, 1, 0.10)"
@@ -57,36 +58,12 @@ GITHUB_PAGE_HTML = """\
   </style>
 </head>
 <body class="min-h-screen font-sans text-gray-900 antialiased">
-    <header class="sticky top-0 z-40 border-b border-[#E5E5E5] bg-white/90 backdrop-blur">
-    <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-      <a href="/" class="flex items-center gap-3" aria-label="BLT-Pool home">
-        <img src="/logo-sm.png" alt="OWASP BLT logo" class="h-10 w-10 rounded-xl border border-[#E5E5E5] bg-white object-contain p-1">
-        <div>
-          <p class="text-sm font-semibold uppercase tracking-wide text-gray-500">OWASP BLT</p>
-          <h1 class="text-lg font-extrabold text-[#111827]">BLT-Pool</h1>
-        </div>
-      </a>
-      <nav class="order-last flex w-full items-center justify-center gap-0.5 rounded-xl border border-blt-border bg-white p-1 sm:order-none sm:w-auto sm:justify-start" aria-label="Main">
-        <a href="/" class="rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm">Mentors</a>
-        <a href="/github-app" class="rounded-lg bg-[#feeae9] px-2 py-1.5 text-xs font-semibold text-blt-primary sm:px-3 sm:py-2 sm:text-sm">GitHub App</a>
-        <a href="https://owaspblt.org" target="_blank" rel="noopener" class="rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm">
-          OWASP BLT <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
-        </a>
-      </nav>
-      <div class="order-2 flex items-center gap-2 sm:order-none">
-        <span role="status" aria-label="Service status: Operational"
-              class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-          <i class="fa-solid fa-circle text-[0.4rem]" aria-hidden="true"></i>
-          Live
-        </span>
-        <a href="{{ADMIN_PATH}}"
-           class="inline-flex items-center gap-1.5 rounded-md border border-[#E5E5E5] px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-[#E10101] hover:bg-[#feeae9] hover:text-[#E10101] focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2">
-          <i class="fa-solid fa-shield-halved text-[#E10101]" aria-hidden="true"></i>
-          Admin
-        </a>
-      </div>
-    </div>
-  </header>
+  <blt-nav project="blt-pool" name="Pool" data-sticky>
+    <a href="/">Mentors</a>
+    <a href="/leaderboard">Leaderboard</a>
+    <a href="/github-app" aria-current="page">GitHub App</a>
+    <a href="{{ADMIN_PATH}}" slot="actions">Admin</a>
+  </blt-nav>
 
   <main class="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
 
@@ -109,7 +86,7 @@ GITHUB_PAGE_HTML = """\
               <i class="fa-brands fa-github" aria-hidden="true"></i>
               Add to GitHub Organization
             </a>
-            <a href="https://git.owaspblt.org/BLT/BLT-Pool" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-md border border-[#E10101] px-5 py-3 text-sm font-semibold text-[#E10101] transition hover:bg-[#E10101] hover:text-white focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2">
+            <a href="https://git.owaspblt.org/BLT/BLT-Pool" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-md border border-[#dc2626] px-5 py-3 text-sm font-semibold text-[#dc2626] transition hover:bg-[#dc2626] hover:text-white focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2">
               <i class="fa-solid fa-code" aria-hidden="true"></i>
               View Source
             </a>
@@ -148,7 +125,7 @@ GITHUB_PAGE_HTML = """\
             <i class="fa-solid fa-list-check" aria-hidden="true"></i>
           </div>
           <h4 class="text-base font-bold text-blt-dark-base">Issue Claim Commands</h4>
-          <p class="mt-2 text-sm leading-relaxed text-gray-600">Use <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs">/assign</code> and <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs">/unassign</code> with an 8-hour claim window.</p>
+          <p class="mt-2 text-sm leading-relaxed text-gray-600">Use <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs">/assign</code> and <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs">/unassign</code> on git.owaspblt.org, answered by BLT-Action with a 7-day claim window.</p>
         </article>
 
         <article class="rounded-2xl border border-blt-border bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md">

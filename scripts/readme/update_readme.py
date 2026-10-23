@@ -9,12 +9,17 @@ Sections are delimited by <!-- NAME-START --> / <!-- NAME-END --> markers:
   DEPLOY        one row per Cloudflare deploy, from scripts/deploy/projects.tsv
   BLOG-POSTS    latest posts from dev.to/owaspblt (only with --blog; needs network)
 
+Everything outside the markers is hand-written and kept as it is: edit README.md directly for the intro,
+"Using AI", "Contributing and project policies" (links to CONTRIBUTING.md, SECURITY.md and the other root
+policy files) and "License".
+
 Run from anywhere inside the repo:  python3 scripts/readme/update_readme.py [--blog] [--offline]
 Needs requests and Pillow (pip install requests pillow). --offline skips every network lookup and
 download for the contributor wall; cached results and existing avatars are reused.
 """
 
 import html
+import json
 import os
 import re
 import subprocess
@@ -32,15 +37,11 @@ README = os.path.join(ROOT, "README.md")
 ROUTES = os.path.join(ROOT, "scripts", "routing", "projects.tsv")
 HOME = "https://git.owaspblt.org/BLT"
 SKIP_DIRS = {"scripts", "docs", ".github"}
-# For folders whose README has no usable opening paragraph
+# For folders whose README has no usable opening paragraph and that have no .forkmesh/info.json
 DESCRIPTIONS = {
     "blt-action": "GitHub Action that automates issue and pull request management: self-assignment, unassignment of stale issues and contributor prompts.",
     "blt-autopatch": "Automated patching: proposes fixes for detected security issues.",
-    "blt-lettuce": "Slack bot for the OWASP BLT community: welcome messages, project discovery and contributor help.",
     "blt-sammich": "Slack bot for the OWASP BLT community: GitHub activity, contributor stats, reminders and project discovery.",
-    "blt-tomato": "OWASP project management scripts and the OWASP project funding site.",
-    "blt-toasty": "AI triage and responsible-disclosure assistant for BLT, running on Cloudflare Workers.",
-    "coderabbit": "Shared CodeRabbit AI review configuration for BLT projects.",
     "dot_github": "Organization profile README and the scripts that refresh its blog posts and contributor wall.",
 }
 
@@ -83,6 +84,20 @@ def describe(readme_text):
     return ""
 
 
+def folder_info(path):
+    """{about, website} strings from <folder>/.forkmesh/info.json (the forge's folder About box), or {}."""
+    try:
+        with open(os.path.join(path, ".forkmesh", "info.json"), encoding="utf-8") as handle:
+            info = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(info, dict):
+        return {}
+    fields = {"about": info.get("about") or info.get("description"),
+              "website": info.get("website") or info.get("homepage")}
+    return {k: " ".join(v.split()) for k, v in fields.items() if isinstance(v, str) and v.strip()}
+
+
 def display_names():
     """Folder -> URL name (e.g. blt-leaf -> BLT-Leaf), from scripts/routing/projects.tsv."""
     names = {}
@@ -106,9 +121,11 @@ def projects_section():
             if os.path.exists(os.path.join(path, name)):
                 text = open(os.path.join(path, name), encoding="utf-8", errors="replace").read()
                 break
+        info = folder_info(path)
         live = re.search(r"\*\*Live Site:\*\*\s*\[(https://[^\]]+)\]", text)
-        live_cell = f"[{live.group(1).split('//')[1].rstrip('/')}]({live.group(1)})" if live else ""
-        desc = (DESCRIPTIONS.get(slug) or describe(text)).replace("|", "\\|")
+        site = live.group(1) if live else info.get("website", "")
+        live_cell = f"[{site.split('//')[1].rstrip('/')}]({site})" if site.startswith("https://") else ""
+        desc = (info.get("about") or DESCRIPTIONS.get(slug) or describe(text)).replace("|", "\\|")
         rows.append(f"| [{names.get(slug, slug)}]({HOME}/{names.get(slug, slug)}) | {desc} | {live_cell} |")
     return "## 📦 Projects\n\n" + "\n".join(rows)
 

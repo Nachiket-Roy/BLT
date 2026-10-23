@@ -6,39 +6,34 @@
   <title>GSoC 2026 Work Product — BLT-NetGuardian</title>
   <meta name="description" content="Google Summer of Code 2026 final work product for OWASP BLT NetGuardian by Preetham Poojari.">
   <link rel="icon" type="image/x-icon" href="../../../favicon.ico">
+  <script>
+    // Saved theme (localStorage "theme", shared with the <blt-nav> toggle) or the system preference.
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
+      var dark = saved === "dark" || (saved !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.classList.toggle("dark", dark);
+    })();
+  </script>
+  <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
   <style>
-    :root { --bg:#fafafa; --fg:#111; --muted:#555; --brand:#E10101; --border:#e5e5e5; --card:#fff; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg:#111827; --fg:#f3f4f6; --muted:#9ca3af; --border:#374151; --card:#1f2937; }
-    }
+    :root { --bg:#fafafa; --fg:#111; --muted:#555; --brand:#dc2626; --border:#e5e5e5; --card:#fff; }
+    html.dark { --bg:#030712; --fg:#f3f4f6; --muted:#9ca3af; --border:#1f2937; --card:#111827; color-scheme:dark; }
     * { box-sizing: border-box; }
     body {
-      margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       background: var(--bg); color: var(--fg); line-height: 1.55;
     }
     a { color: var(--brand); }
-    header {
-      position: sticky; top: 0; z-index: 10;
-      border-bottom: 1px solid var(--border); background: var(--card);
-    }
-    .bar {
-      max-width: 56rem; margin: 0 auto; padding: 0.85rem 1rem;
-      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-    }
-    .brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: inherit; }
-    .brand img { width: 2rem; height: 2rem; }
-    .brand strong { display: block; font-size: 0.9rem; }
-    .brand span { display: block; font-size: 0.75rem; color: var(--muted); }
-    .back {
-      display: inline-block; border: 1px solid var(--brand); color: var(--brand);
-      text-decoration: none; padding: 0.4rem 0.75rem; border-radius: 0.4rem; font-size: 0.85rem; font-weight: 600;
-    }
+    blt-nav:not(:defined) { display: block; min-height: 61px; }
+    blt-nav:not(:defined) > * { display: none; }
     main { max-width: 56rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
     .badge {
       display: inline-block; border: 1px solid #fecaca; background: #fef2f2; color: var(--brand);
       font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
       padding: 0.25rem 0.6rem; border-radius: 999px;
     }
+    html.dark .badge { border-color: rgba(248,113,113,0.3); background: rgba(220,38,38,0.12); }
     h1 { font-size: 1.75rem; margin: 0.75rem 0 0.5rem; line-height: 1.25; }
     h2 { font-size: 1.15rem; margin: 1.75rem 0 0.75rem; color: var(--brand); }
     p, li { color: var(--muted); font-size: 0.95rem; }
@@ -70,18 +65,11 @@
   </style>
 </head>
 <body>
-  <header>
-    <div class="bar">
-      <a class="brand" href="../../../index.html" aria-label="OWASP BLT GSoC Home">
-        <img src="../../../images/logo.png" alt="OWASP BLT">
-        <div>
-          <strong>OWASP BLT</strong>
-          <span>Google Summer of Code 2026</span>
-        </div>
-      </a>
-      <a class="back" href="../../../gsoc2026.html">GSoC 2026</a>
-    </div>
-  </header>
+  <blt-nav project="blt-gsoc" name="GSoC" data-sticky>
+    <a href="../../../index.html">Home</a>
+    <a href="../../../gsoc2026.html">GSoC 2026</a>
+    <a href="./" aria-current="page">NetGuardian</a>
+  </blt-nav>
 
   <main>
     <span class="badge">GSoC 2026 Work Product</span>

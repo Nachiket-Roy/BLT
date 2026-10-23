@@ -59,8 +59,9 @@ UNASSIGN_COMMAND = "/unassign"
 APPROVE_COMMAND = "/approve"
 DENY_COMMAND = "/deny"
 LEADERBOARD_COMMAND = "/leaderboard"
+# Handled by BLT-Action, not by this app (issue #38).
+BLT_ACTION_COMMANDS = frozenset({ASSIGN_COMMAND, UNASSIGN_COMMAND})
 MAX_ASSIGNEES = 1
-ASSIGNMENT_DURATION_HOURS = 8
 BUG_LABELS = {"bug", "vulnerability", "security"}
 HELP_WANTED_LABEL = "help wanted"
 TRIAGE_REVIEWER = "donnieblt"
@@ -79,13 +80,10 @@ MENTOR_ASSIGNED_LABEL = "mentor-assigned"
 NEEDS_APPROVAL_LABEL = "needs-approval"
 NEEDS_APPROVAL_LABEL_COLOR = "e11d48"
 MENTOR_MAX_MENTEES = 3
-MENTOR_STALE_DAYS = 14
 MENTOR_LABEL_COLOR = "7057ff"
 MENTOR_ASSIGNED_LABEL_COLOR = "0075ca"
 # Issues with these labels bypass mentor auto-assignment (go to core maintainers).
 SECURITY_BYPASS_LABELS = {"security", "vulnerability", "security-sensitive", "private-security"}
-# Seconds in a day — used for stale-assignment threshold calculations.
-_SECONDS_PER_DAY = 86400
 # TTL for cached GitHub-sourced all-time mentor stats in D1 (24 hours).
 _MENTOR_STATS_CACHE_TTL = 86400
 # When True, one active mentor is auto-requested as a reviewer on every newly
@@ -261,26 +259,6 @@ async def get_installation_token(
     )
     if resp.status != 201:
         console.error(f"[BLT] Failed to get installation token: {resp.status}")
-        return None
-    data = json.loads(await resp.text())
-    return data.get("token")
-
-
-async def get_installation_access_token(installation_id: int, jwt_token: str) -> Optional[str]:
-    """Exchange a prebuilt GitHub App JWT for an installation access token."""
-    resp = await fetch(
-        f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-        method="POST",
-        headers=Headers.new({
-            "Authorization": f"Bearer {jwt_token}",
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json",
-            "User-Agent": f"BLT-Pool/{APP_VERSION}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }.items()),
-    )
-    if resp.status != 201:
-        console.error(f"[BLT] Failed to get installation access token: {resp.status}")
         return None
     data = json.loads(await resp.text())
     return data.get("token")
@@ -3084,39 +3062,6 @@ async def _find_assigned_mentor_from_comments(
     return last_mentor
 
 
-async def _get_last_human_activity_ts(
-    owner: str, repo: str, issue_number: int, issue: dict, token: str
-) -> float:
-    """Return the timestamp (epoch seconds) of the most recent non-bot activity.
-
-    Fetches the most recently created page of issue comments and returns the
-    timestamp of the latest comment posted by a non-bot human.  If no human
-    comments are found the issue's ``created_at`` value is used as a fallback so
-    that newly opened issues without any comments are still eligible for stale
-    checks after ``MENTOR_STALE_DAYS`` days.
-    """
-    fallback = _parse_github_timestamp(issue.get("created_at", "")) or 0.0
-
-    resp = await github_api(
-        "GET",
-        f"/repos/{owner}/{repo}/issues/{issue_number}/comments"
-        f"?sort=created&direction=desc&per_page=100",
-        token,
-    )
-    if resp.status != 200:
-        return fallback
-
-    comments = json.loads(await resp.text())
-    for comment in comments:
-        user = comment.get("user") or {}
-        if _is_human(user) and not _is_bot(user):
-            ts = _parse_github_timestamp(comment.get("created_at", ""))
-            if ts:
-                return ts
-
-    return fallback
-
-
 def _is_security_issue(issue: dict) -> bool:
     """Return ``True`` if the issue carries any security-sensitive label."""
     labels = {lb.get("name", "").lower() for lb in issue.get("labels", [])}
@@ -3585,86 +3530,6 @@ async def handle_mentor_rematch(
     )
 
 
-async def _check_stale_mentor_assignments(owner: str, repo: str, token: str) -> None:
-    """Unassign mentors from issues that have been inactive for MENTOR_STALE_DAYS days.
-
-    Iterates over open issues that carry the ``mentor-assigned`` label.  When the
-    issue's ``updated_at`` timestamp is older than the stale threshold the mentor is
-    unassigned, the ``mentor-assigned`` label is removed, and an explanatory comment
-    is posted.
-    """
-    try:
-        stale_threshold = MENTOR_STALE_DAYS * _SECONDS_PER_DAY
-        current_time = time.time()
-        per_page = 100
-        max_pages = 10  # Conservative limit to avoid excessive subrequests.
-        page = 1
-
-        while page <= max_pages:
-            resp = await github_api(
-                "GET",
-                f"/repos/{owner}/{repo}/issues"
-                f"?state=open&labels={MENTOR_ASSIGNED_LABEL}&per_page={per_page}&page={page}",
-                token,
-            )
-            if resp.status != 200:
-                break
-
-            issues = json.loads(await resp.text())
-            if not issues:
-                break
-
-            for issue in issues:
-                if "pull_request" in issue:
-                    continue
-                issue_number = issue["number"]
-                # Use the last human (non-bot) comment timestamp as the activity
-                # signal so that bot-posted comments (e.g. mentor assignment
-                # notices) don't reset the stale clock.
-                last_human_ts = await _get_last_human_activity_ts(
-                    owner, repo, issue_number, issue, token
-                )
-                if not last_human_ts:
-                    continue
-                if current_time - last_human_ts <= stale_threshold:
-                    continue
-
-                # Issue is stale — identify the mentor from the hidden comment marker.
-                current_mentor = await _find_assigned_mentor_from_comments(
-                    owner, repo, issue_number, token
-                )
-
-                # Remove the mentor-assigned label.
-                await github_api(
-                    "DELETE",
-                    f"/repos/{owner}/{repo}/issues/{issue_number}/labels/{MENTOR_ASSIGNED_LABEL}",
-                    token,
-                )
-
-                days_elapsed = int((current_time - last_human_ts) / _SECONDS_PER_DAY)
-                mentor_mention = f"@{current_mentor} " if current_mentor else ""
-                await create_comment(
-                    owner,
-                    repo,
-                    issue_number,
-                    f"{mentor_mention}This issue has had no activity for {days_elapsed} days "
-                    f"so the mentor assignment has been automatically released. "
-                    "The issue remains open — use `/mentor` to request a new mentor when work resumes.\n\n"
-                    "— [OWASP BLT-Pool](https://pool.owaspblt.org)",
-                    token,
-                )
-                console.log(
-                    f"[MentorPool] Released stale mentor assignment on {owner}/{repo}#{issue_number}"
-                )
-
-            if len(issues) < per_page:
-                break
-
-            page += 1
-    except Exception as exc:
-        console.error(f"[MentorPool] Error checking stale mentors in {owner}/{repo}: {exc}")
-
-
 # ---------------------------------------------------------------------------
 # Event handlers — mirror the Node.js handler logic exactly
 # ---------------------------------------------------------------------------
@@ -3708,15 +3573,17 @@ async def handle_issue_comment(payload: dict, token: str, env=None, ctx=None) ->
             # Fallback for local tests / non-CW runtimes.
             await _deferred_referral()
 
+    # /assign and /unassign belong to BLT-Action (blt-action/forge/assign.mjs on git.owaspblt.org,
+    # issue #38): this app ignores them, so contributors never get two answers. /approve still reads
+    # earlier /assign comments to pick the assignee.
+    if command in BLT_ACTION_COMMANDS:
+        return
+
     # Add eyes reaction immediately to acknowledge command receipt
     if comment_id and command:
         await create_reaction(owner, repo, comment_id, "eyes", token)
 
-    if command == ASSIGN_COMMAND:
-        await _assign(owner, repo, issue, login, token)
-    elif command == UNASSIGN_COMMAND:
-        await _unassign(owner, repo, issue, login, token)
-    elif command == APPROVE_COMMAND:
+    if command == APPROVE_COMMAND:
         await _approve(owner, repo, issue, login, token)
     elif command == DENY_COMMAND:
         await _deny(owner, repo, issue, login, token)
@@ -3768,106 +3635,6 @@ async def handle_issue_comment(payload: dict, token: str, env=None, ctx=None) ->
             await handle_mentor_handoff(owner, repo, issue, login, token, mentors_config, env=env)
         elif command == REMATCH_COMMAND:
             await handle_mentor_rematch(owner, repo, issue, login, token, mentors_config, env=env)
-
-
-async def _assign(
-    owner: str, repo: str, issue: dict, login: str, token: str
-) -> None:
-    num = issue["number"]
-    if issue.get("pull_request"):
-        await create_comment(
-            owner, repo, num,
-            f"@{login} This command only works on issues, not pull requests.",
-            token,
-        )
-        return
-    if issue["state"] == "closed":
-        await create_comment(
-            owner, repo, num,
-            f"@{login} This issue is already closed and cannot be assigned.",
-            token,
-        )
-        return
-    assignees = [a["login"] for a in issue.get("assignees", [])]
-    if login in assignees:
-        await create_comment(
-            owner, repo, num,
-            f"@{login} You are already assigned to this issue.",
-            token,
-        )
-        return
-    if len(assignees) >= MAX_ASSIGNEES:
-        await create_comment(
-            owner, repo, num,
-            f"@{login} This issue already has the maximum number of assignees "
-            f"({MAX_ASSIGNEES}). Please work on a different issue.",
-            token,
-        )
-        return
-    label_names = {lb.get("name", "").lower() for lb in issue.get("labels", [])}
-    if HELP_WANTED_LABEL not in label_names:
-        await create_comment(
-            owner, repo, num,
-            f"@{login} This issue is not yet ready for assignment. "
-            f"A maintainer (such as @{TRIAGE_REVIEWER}) must first review it and add the "
-            f'"{HELP_WANTED_LABEL}" label before `/assign` can be used.',
-            token,
-        )
-        await _ensure_label_exists(owner, repo, NEEDS_APPROVAL_LABEL, NEEDS_APPROVAL_LABEL_COLOR, token)
-        await github_api(
-            "POST",
-            f"/repos/{owner}/{repo}/issues/{num}/labels",
-            token,
-            {"labels": [NEEDS_APPROVAL_LABEL]},
-        )
-        return
-    await github_api(
-        "POST",
-        f"/repos/{owner}/{repo}/issues/{num}/assignees",
-        token,
-        {"assignees": [login]},
-    )
-    deadline = time.strftime(
-        "%a, %d %b %Y %H:%M:%S UTC",
-        time.gmtime(time.time() + ASSIGNMENT_DURATION_HOURS * 3600),
-    )
-    await create_comment(
-        owner, repo, num,
-        f"@{login} You have been assigned to this issue! 🎉\n\n"
-        f"Please submit a pull request within **{ASSIGNMENT_DURATION_HOURS} hours** "
-        f"(by {deadline}).\n\n"
-        f"If you need more time or cannot complete the work, please comment "
-        f"`{UNASSIGN_COMMAND}` so others can pick it up.\n\n"
-        "Happy coding! 🚀 — [OWASP BLT-Pool](https://pool.owaspblt.org)",
-        token,
-    )
-
-
-async def _unassign(
-    owner: str, repo: str, issue: dict, login: str, token: str
-) -> None:
-    num = issue["number"]
-    assignees = [a["login"] for a in issue.get("assignees", [])]
-    if login not in assignees:
-        await create_comment(
-            owner, repo, num,
-            f"@{login} You are not currently assigned to this issue.",
-            token,
-        )
-        return
-    await github_api(
-        "DELETE",
-        f"/repos/{owner}/{repo}/issues/{num}/assignees",
-        token,
-        {"assignees": [login]},
-    )
-    await create_comment(
-        owner, repo, num,
-        f"@{login} You have been unassigned from this issue. "
-        "Thanks for letting us know! 👍\n\n"
-        "The issue is now open for others to pick up.",
-        token,
-    )
 
 
 async def _get_last_assign_requester(
@@ -5194,6 +4961,9 @@ _CALLBACK_HTML = """\
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BLT-Pool GitHub App — Installed!</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/theme-init.js"></script>
+  <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
+  <link rel="stylesheet" href="/blt-pool-theme.css">
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
@@ -5204,7 +4974,7 @@ _CALLBACK_HTML = """\
 <body class="min-h-screen flex items-center justify-center" style="background:#111827;color:#e5e7eb;">
   <div class="text-center rounded-xl p-12 max-w-md w-full mx-4" style="background:#1F2937;border:1px solid #374151;">
     <div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style="background:rgba(225,1,1,0.1);">
-      <i class="fa-solid fa-circle-check text-3xl" style="color:#E10101;" aria-hidden="true"></i>
+      <i class="fa-solid fa-circle-check text-3xl" style="color:#dc2626;" aria-hidden="true"></i>
     </div>
     <h1 class="text-2xl font-bold text-white mb-4">Installation complete!</h1>
     <p class="leading-relaxed mb-6" style="color:#9ca3af;">
@@ -5215,7 +4985,7 @@ _CALLBACK_HTML = """\
       href="https://owaspblt.org"
       target="_blank"
       rel="noopener"
-      style="color:#E10101;"
+      style="color:#dc2626;"
       onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"
     >
       Visit OWASP BLT <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
@@ -5428,7 +5198,7 @@ def _generate_mentor_row(mentor: dict, stats: Optional[dict] = None) -> str:
         ref_escaped = _html_mod.escape(referred_by)
         meta_parts.append(
             f'<a href="https://github.com/{ref_escaped}" target="_blank" rel="noopener" '
-            f'class="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-[#E10101] whitespace-nowrap" '
+            f'class="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-[#dc2626] whitespace-nowrap" '
             f'title="Referred by @{ref_escaped}">'
             f'<img src="https://github.com/{ref_escaped}.png" alt="{ref_escaped}" width="16" height="16" '
             f'class="h-4 w-4 aspect-square rounded-full border border-gray-200 object-cover">'
@@ -5441,7 +5211,7 @@ def _generate_mentor_row(mentor: dict, stats: Optional[dict] = None) -> str:
         + '</div>'
     )
 
-    title_row = f'<p class="mt-1 text-sm font-semibold text-[#E10101]">{title}</p>' if title else ''
+    title_row = f'<p class="mt-1 text-sm font-semibold text-[#dc2626]">{title}</p>' if title else ''
     bio_row = f'<p class="mt-3 text-sm leading-relaxed text-gray-600">{bio}</p>' if bio else ''
     skills_row = (
         '<div class="mt-3 flex flex-wrap gap-1">' + specialty_chips + '</div>'
@@ -5555,7 +5325,7 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
                 <div class="min-w-0">
                   <p class="text-xs text-gray-400 leading-none">Mentee</p>
                   <a href="https://github.com/{mentee}" target="_blank" rel="noopener"
-                     class="text-sm font-semibold text-[#111827] hover:text-[#E10101] truncate block">
+                     class="text-sm font-semibold text-[#111827] hover:text-[#dc2626] truncate block">
                     @{mentee}
                   </a>
                 </div>
@@ -5571,16 +5341,16 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
                   <div class="min-w-0">
                     <p class="text-xs text-gray-400 leading-none">Mentor</p>
                     <a href="https://github.com/{mentor}" target="_blank" rel="noopener"
-                       class="text-sm font-semibold text-[#111827] hover:text-[#E10101] truncate block">
+                       class="text-sm font-semibold text-[#111827] hover:text-[#dc2626] truncate block">
                       @{mentor}
                     </a>
                   </div>
-                  <span class="shrink-0 rounded-full bg-[#feeae9] px-2 py-0.5 text-xs font-semibold text-[#E10101]" title="Total comments">{mentor_comments} pts</span>
+                  <span class="shrink-0 rounded-full bg-[#feeae9] px-2 py-0.5 text-xs font-semibold text-[#dc2626]" title="Total comments">{mentor_comments} pts</span>
                 </div>
                 {mentee_html}
                 <a href="https://github.com/{org}/{repo}/issues/{number}"
                    target="_blank" rel="noopener"
-                   class="inline-flex items-center gap-1.5 rounded-full bg-[#feeae9] px-3 py-1 text-xs font-semibold text-[#E10101] hover:bg-red-100 transition shrink-0">
+                   class="inline-flex items-center gap-1.5 rounded-full bg-[#feeae9] px-3 py-1 text-xs font-semibold text-[#dc2626] hover:bg-red-100 transition shrink-0">
                   <i class="fa-brands fa-github text-xs" aria-hidden="true"></i>
                   {org}/{repo}#{number}
                 </a>
@@ -5594,7 +5364,7 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
         active_assignments_html = f'''
     <section id="active-assignments" class="rounded-2xl border border-[#E5E5E5] bg-white p-7 sm:p-9">
       <div class="mb-5 flex items-center gap-3">
-        <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#feeae9] text-[#E10101]">
+        <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#feeae9] text-[#dc2626]">
           <i class="fa-solid fa-link" aria-hidden="true"></i>
         </div>
         <div>
@@ -5614,18 +5384,18 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
         lb_items = "\n".join(
             f'''<li class="flex items-center justify-between gap-2 py-1.5 border-b border-[#E5E5E5] last:border-0">
               <a href="https://github.com/{ref}" target="_blank" rel="noopener"
-                 class="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-[#E10101] truncate">
+                 class="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-[#dc2626] truncate">
                 <img src="https://github.com/{ref}.png" alt="{ref}" class="h-6 w-6 rounded-full border border-[#E5E5E5]">
                 @{ref}
               </a>
-              <span class="shrink-0 rounded-full bg-[#feeae9] px-2 py-0.5 text-xs font-bold text-[#E10101]">{cnt}</span>
+              <span class="shrink-0 rounded-full bg-[#feeae9] px-2 py-0.5 text-xs font-bold text-[#dc2626]">{cnt}</span>
             </li>'''
             for ref, cnt in leaderboard_rows[:10]
         )
         leaderboard_html = f'''
         <section class="rounded-2xl border border-[#E5E5E5] bg-white p-6 h-fit sticky top-24">
           <div class="mb-4 flex items-center gap-2">
-            <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#feeae9] text-[#E10101]">
+            <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#feeae9] text-[#dc2626]">
               <i class="fa-solid fa-trophy text-sm" aria-hidden="true"></i>
             </div>
             <h3 class="text-lg font-bold text-[#111827]">Referral Leaderboard</h3>
@@ -5639,7 +5409,7 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
         leaderboard_html = '''
         <section class="rounded-2xl border border-[#E5E5E5] bg-white p-6 h-fit sticky top-24">
           <div class="mb-4 flex items-center gap-2">
-            <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#feeae9] text-[#E10101]">
+            <div class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#feeae9] text-[#dc2626]">
               <i class="fa-solid fa-trophy text-sm" aria-hidden="true"></i>
             </div>
             <h3 class="text-lg font-bold text-[#111827]">Referral Leaderboard</h3>
@@ -5655,22 +5425,23 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
   <meta name="description" content="BLT-Pool for OWASP BLT. Connect with mentors and install the BLT GitHub extension.">
   <title>BLT-Pool | OWASP BLT Mentor Directory</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="/theme-init.js"></script>
+  <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
+  <link rel="stylesheet" href="/blt-pool-theme.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
-  <link rel="icon" type="image/png" href="/logo-sm.png?v=3">
+  <link rel="icon" href="/blt-logo.svg" type="image/svg+xml">
   <script>
     tailwind.config = {{
+      darkMode: 'class',
       theme: {{
         extend: {{
           colors: {{
-            'blt-primary': '#E10101',
+            'blt-primary': '#dc2626',
             'blt-primary-hover': '#b91c1c',
             'blt-border': '#E5E5E5'
           }},
           fontFamily: {{
-            sans: ['Plus Jakarta Sans', 'ui-sans-serif', 'system-ui', 'sans-serif']
+            sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif']
           }}
         }}
       }}
@@ -5687,32 +5458,11 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
 </head>
 <body class="min-h-screen font-sans text-gray-900 antialiased">
 
-  <header class="sticky top-0 z-40 border-b border-[#E5E5E5] bg-white/90 backdrop-blur">
-    <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-      <a href="/" class="flex items-center gap-3" aria-label="BLT-Pool home">
-        <img src="/logo-sm.png" alt="OWASP BLT logo" class="h-10 w-10 rounded-xl border border-[#E5E5E5] bg-white object-contain p-1">
-        <div>
-          <p class="text-sm font-semibold uppercase tracking-wide text-gray-500">OWASP BLT</p>
-          <h1 class="text-lg font-extrabold text-[#111827]">BLT-Pool</h1>
-        </div>
-      </a>
-     <nav class="order-3 flex w-full items-center justify-center gap-0.5 rounded-xl border border-[#E5E5E5] bg-white p-1 sm:order-none sm:w-auto sm:justify-start" aria-label="Primary">
-        <a href="/" class="rounded-lg bg-[#feeae9] px-2 py-1.5 text-xs font-semibold text-[#E10101] sm:px-3 sm:py-2 sm:text-sm">Mentors</a>
-        <a href="/leaderboard" class="rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm">Leaderboard</a>
-        <a href="/github-app" class="rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm">GitHub App</a>
-        <a href="https://owaspblt.org" target="_blank" rel="noopener" class="rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm">
-          OWASP BLT <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
-        </a>
-      </nav>
-      <div class="order-2 flex items-center gap-2 sm:order-none">
-        <span role="status" aria-label="Service status: Operational"
-              class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-          <i class="fa-solid fa-circle text-[0.4rem]" aria-hidden="true"></i>
-          Live
-        </span>
-      </div>
-    </div>
-  </header>
+  <blt-nav project="blt-pool" name="Pool" data-sticky>
+    <a href="/" aria-current="page">Mentors</a>
+    <a href="/leaderboard">Leaderboard</a>
+    <a href="/github-app">GitHub App</a>
+  </blt-nav>
 
   <main class="mx-auto flex-1 w-full max-w-7xl space-y-10 px-4 py-10 sm:px-6 lg:px-8">
 
@@ -5720,24 +5470,24 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
       <div class="grid gap-8 lg:grid-cols-2 lg:items-center">
         <div>
           <span class="mb-4 inline-flex items-center gap-2 rounded-full border border-[#E5E5E5] bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-700">
-            <i class="fa-solid fa-users text-[#E10101]" aria-hidden="true"></i>
+            <i class="fa-solid fa-users text-[#dc2626]" aria-hidden="true"></i>
             Mentor directory for BLT contributors
           </span>
           <h2 class="text-3xl font-extrabold leading-tight text-[#111827] sm:text-5xl">
             Find your guide inside
-            <span class="text-[#E10101]">OWASP BLT-Pool</span>
+            <span class="text-[#dc2626]">OWASP BLT-Pool</span>
           </h2>
           <p class="mt-4 max-w-2xl text-base leading-relaxed text-gray-600 sm:text-lg">
             Connect with mentors, get support for your first pull request, and keep contribution quality high with a practical community workflow.
           </p>
           <div class="mt-7 flex flex-wrap gap-3">
             <a href="https://owasp.slack.com/signup" target="_blank" rel="noopener"
-               class="inline-flex items-center gap-2 rounded-md bg-[#E10101] px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2">
+               class="inline-flex items-center gap-2 rounded-md bg-[#dc2626] px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2">
               <i class="fa-brands fa-slack" aria-hidden="true"></i>
               Join OWASP Slack
             </a>
             <a href="/github-app"
-               class="inline-flex items-center gap-2 rounded-md border border-[#E10101] px-5 py-3 text-sm font-semibold text-[#E10101] transition hover:bg-[#E10101] hover:text-white focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2">
+               class="inline-flex items-center gap-2 rounded-md border border-[#dc2626] px-5 py-3 text-sm font-semibold text-[#dc2626] transition hover:bg-[#dc2626] hover:text-white focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2">
               <i class="fa-brands fa-github" aria-hidden="true"></i>
               Open GitHub App
             </a>
@@ -5786,21 +5536,21 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
       <h3 class="text-2xl font-bold text-[#111827]">How Mentor Matching Works</h3>
       <div class="mt-6 grid gap-5 md:grid-cols-3">
         <article class="rounded-xl border border-[#E5E5E5] bg-gray-50 p-5">
-          <div class="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#feeae9] text-[#E10101]">
+          <div class="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#feeae9] text-[#dc2626]">
             <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
           </div>
           <h4 class="text-base font-bold text-[#111827]">1. Pick an issue</h4>
           <p class="mt-2 text-sm text-gray-600">Start with an issue tagged for contribution or mentor support.</p>
         </article>
         <article class="rounded-xl border border-[#E5E5E5] bg-gray-50 p-5">
-          <div class="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#feeae9] text-[#E10101]">
+          <div class="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#feeae9] text-[#dc2626]">
             <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
           </div>
           <h4 class="text-base font-bold text-[#111827]">2. Get assigned</h4>
           <p class="mt-2 text-sm text-gray-600">Mentors are matched with healthy load balancing to avoid bottlenecks.</p>
         </article>
         <article class="rounded-xl border border-[#E5E5E5] bg-gray-50 p-5">
-          <div class="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#feeae9] text-[#E10101]">
+          <div class="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#feeae9] text-[#dc2626]">
             <i class="fa-solid fa-comments" aria-hidden="true"></i>
           </div>
           <h4 class="text-base font-bold text-[#111827]">3. Build and review</h4>
@@ -5816,23 +5566,23 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
       </p>
       <div class="mt-5 grid gap-4 sm:grid-cols-2">
         <article class="rounded-xl border border-[#E5E5E5] bg-gray-50 p-4">
-          <p class="font-mono text-sm font-bold text-[#E10101]">/mentor</p>
+          <p class="font-mono text-sm font-bold text-[#dc2626]">/mentor</p>
           <p class="mt-2 text-sm text-gray-600">Request a mentor for this issue. The bot auto-assigns the best available mentor from the pool.</p>
         </article>
         <article class="rounded-xl border border-[#E5E5E5] bg-gray-50 p-4">
-          <p class="font-mono text-sm font-bold text-[#E10101]">/unmentor</p>
+          <p class="font-mono text-sm font-bold text-[#dc2626]">/unmentor</p>
           <p class="mt-2 text-sm text-gray-600">Cancel a mentor assignment. Use this to undo an accidental <code class="font-mono">/mentor</code> request. Available to the issue author or the assigned mentor.</p>
         </article>
         <article class="rounded-xl border border-[#E5E5E5] bg-gray-50 p-4">
-          <p class="font-mono text-sm font-bold text-[#E10101]">/mentor-pause</p>
+          <p class="font-mono text-sm font-bold text-[#dc2626]">/mentor-pause</p>
           <p class="mt-2 text-sm text-gray-600">Pause your mentor availability. Use this when you need a break from accepting new mentees.</p>
         </article>
         <article class="rounded-xl border border-[#E5E5E5] bg-gray-50 p-4">
-          <p class="font-mono text-sm font-bold text-[#E10101]">/handoff</p>
+          <p class="font-mono text-sm font-bold text-[#dc2626]">/handoff</p>
           <p class="mt-2 text-sm text-gray-600">Transfer this issue to another available mentor. The current mentor uses this to hand off cleanly.</p>
         </article>
         <article class="rounded-xl border border-[#E5E5E5] bg-gray-50 p-4">
-          <p class="font-mono text-sm font-bold text-[#E10101]">/rematch</p>
+          <p class="font-mono text-sm font-bold text-[#dc2626]">/rematch</p>
           <p class="mt-2 text-sm text-gray-600">Request a different mentor for this issue. The bot re-runs matching to find a fresh assignment.</p>
         </article>
       </div>
@@ -5840,7 +5590,7 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
 
     <section id="join-mentor" class="rounded-2xl border border-[#E5E5E5] bg-white p-7 sm:p-9">
       <div class="mb-6 flex items-start gap-4">
-        <div class="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#feeae9] text-[#E10101]">
+        <div class="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#feeae9] text-[#dc2626]">
           <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
         </div>
         <div>
@@ -5853,19 +5603,19 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
       <form id="mentor-form" class="grid gap-4 sm:grid-cols-2" novalidate>
         <div>
           <label for="mf-name" class="mb-1 block text-sm font-semibold text-gray-700">
-            Display Name <span class="text-[#E10101]">*</span>
+            Display Name <span class="text-[#dc2626]">*</span>
           </label>
           <input id="mf-name" type="text" required autocomplete="name" placeholder="Jane Doe"
                  maxlength="100"
-                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none">
+                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none">
         </div>
         <div>
           <label for="mf-github" class="mb-1 block text-sm font-semibold text-gray-700">
-            GitHub Username <span class="text-[#E10101]">*</span>
+            GitHub Username <span class="text-[#dc2626]">*</span>
           </label>
           <input id="mf-github" type="text" required autocomplete="username" placeholder="janedoe"
                  maxlength="39" pattern="[a-zA-Z0-9]([a-zA-Z0-9\\-]{{0,37}}[a-zA-Z0-9])?"
-                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none">
+                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none">
         </div>
                 <div>
                     <label for="mf-title" class="mb-1 block text-sm font-semibold text-gray-700">
@@ -5873,7 +5623,7 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
                     </label>
                     <input id="mf-title" type="text" placeholder="e.g. Senior Security Engineer"
                                  maxlength="120"
-                                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none">
+                                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none">
                 </div>
                 <div>
                     <label for="mf-bio" class="mb-1 block text-sm font-semibold text-gray-700">
@@ -5881,7 +5631,7 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
                     </label>
                     <textarea id="mf-bio" rows="3" placeholder="What do you mentor people on?"
                                         maxlength="500"
-                                        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none"></textarea>
+                                        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none"></textarea>
                 </div>
         <div class="sm:col-span-2">
           <label for="mf-specialties" class="mb-1 block text-sm font-semibold text-gray-700">
@@ -5889,14 +5639,14 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
           </label>
           <input id="mf-specialties" type="text" placeholder="e.g. frontend, python, security, docs"
                  maxlength="300"
-                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none">
+                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none">
         </div>
         <div>
           <label for="mf-max" class="mb-1 block text-sm font-semibold text-gray-700">
             Max concurrent mentees
           </label>
           <input id="mf-max" type="number" min="1" max="10" value="3"
-                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none">
+                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none">
         </div>
         <div>
           <label for="mf-tz" class="mb-1 block text-sm font-semibold text-gray-700">
@@ -5904,7 +5654,7 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
           </label>
           <input id="mf-tz" type="text" placeholder="e.g. UTC+5:30"
                  maxlength="60"
-                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none">
+                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none">
         </div>
                 <div>
                     <label for="mf-email" class="mb-1 block text-sm font-semibold text-gray-700">
@@ -5912,7 +5662,7 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
                     </label>
                     <input id="mf-email" type="email" placeholder="e.g. mentor@example.com"
                                  maxlength="255"
-                                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none">
+                                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none">
                 </div>
                 <div>
                     <label for="mf-slack" class="mb-1 block text-sm font-semibold text-gray-700">
@@ -5920,7 +5670,7 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
                     </label>
                     <input id="mf-slack" type="text" placeholder="e.g. janedoe"
                                  maxlength="80"
-                                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none">
+                                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none">
                 </div>
         <div class="sm:col-span-2">
           <label for="mf-referral" class="mb-1 block text-sm font-semibold text-gray-700">
@@ -5928,13 +5678,13 @@ def _index_html(mentors: list = None, mentor_stats: Optional[dict] = None, activ
           </label>
           <input id="mf-referral" type="text" placeholder="e.g. janedoe"
                  maxlength="39" pattern="[a-zA-Z0-9]([a-zA-Z0-9\\-]{{0,37}}[a-zA-Z0-9])?"
-                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E10101] focus:ring-1 focus:ring-[#E10101] focus:outline-none">
+                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#dc2626] focus:ring-1 focus:ring-[#dc2626] focus:outline-none">
         </div>
-        <div id="mf-error" role="alert" class="hidden sm:col-span-2 text-sm font-semibold text-[#E10101]"></div>
+        <div id="mf-error" role="alert" class="hidden sm:col-span-2 text-sm font-semibold text-[#dc2626]"></div>
         <div id="mf-success" role="status" class="hidden sm:col-span-2 text-sm font-semibold text-green-600"></div>
         <div class="sm:col-span-2">
           <button id="mf-submit" type="submit"
-                  class="inline-flex items-center gap-2 rounded-md bg-[#E10101] px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                  class="inline-flex items-center gap-2 rounded-md bg-[#dc2626] px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
             <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
             Join the Mentor Pool
           </button>
@@ -6540,13 +6290,13 @@ def _leaderboard_html(data: dict) -> str:
             <td class="px-3 py-2 text-right text-sm">{u['closedPrs']}</td>
             <td class="px-3 py-2 text-right text-sm">{u['reviews']}</td>
             <td class="px-3 py-2 text-right text-sm">{u['comments']}</td>
-            <td class="px-3 py-2 text-right text-sm font-bold text-[#E10101]">{u['total']}</td>
+            <td class="px-3 py-2 text-right text-sm font-bold text-[#dc2626]">{u['total']}</td>
           </tr>""")
     if not rows:
         rows.append(
             '<tr><td colspan="9" class="px-3 py-10 text-center text-sm text-gray-500">'
             f'No pull request activity recorded for {esc(title_month)} yet. '
-            f'<a class="text-[#E10101] underline" href="{esc(data["forge"]["pulls_url"])}">Open a pull request</a> '
+            f'<a class="text-[#dc2626] underline" href="{esc(data["forge"]["pulls_url"])}">Open a pull request</a> '
             'on git.owaspblt.org to get on the board.</td></tr>'
         )
     pulls = []
@@ -6556,7 +6306,7 @@ def _leaderboard_html(data: dict) -> str:
         )
         pulls.append(f"""
           <li class="flex flex-wrap items-center gap-2 border-t border-[#E5E5E5] py-2 text-sm">
-            <a href="{esc(p['url'])}" target="_blank" rel="noopener" class="font-semibold text-[#E10101] hover:underline">#{p['number']}</a>
+            <a href="{esc(p['url'])}" target="_blank" rel="noopener" class="font-semibold text-[#dc2626] hover:underline">#{p['number']}</a>
             <span class="text-gray-900">{esc(p['title'])}</span>
             {projects}
             <span class="text-xs text-gray-500">by @{esc(p['author'])} · {esc(p['status'])}</span>
@@ -6576,31 +6326,25 @@ def _leaderboard_html(data: dict) -> str:
   <meta name="description" content="Monthly pull request leaderboard for OWASP BLT contributors on git.owaspblt.org.">
   <title>PR Leaderboard | BLT-Pool</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/png" href="/logo-sm.png?v=3">
-  <style>body {{ font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif; background: #f8fafc; }}</style>
+  <script src="/theme-init.js"></script>
+  <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
+  <link rel="stylesheet" href="/blt-pool-theme.css">
+  <link rel="icon" href="/blt-logo.svg" type="image/svg+xml">
+  <style>body {{ font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f8fafc; }}</style>
 </head>
 <body class="min-h-screen text-gray-900 antialiased">
-  <header class="border-b border-[#E5E5E5] bg-white">
-    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <a href="/" class="flex items-center gap-3">
-        <img src="/logo-sm.png" alt="OWASP BLT logo" class="h-10 w-10 rounded-xl border border-[#E5E5E5] bg-white object-contain p-1">
-        <div><p class="text-sm font-semibold uppercase tracking-wide text-gray-500">OWASP BLT</p>
-        <h1 class="text-lg font-extrabold">BLT-Pool</h1></div>
-      </a>
-      <nav class="flex gap-1 text-sm font-semibold">
-        <a href="/" class="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50">Mentors</a>
-        <a href="/leaderboard" class="rounded-lg bg-[#feeae9] px-3 py-2 text-[#E10101]">Leaderboard</a>
-        <a href="{esc(data['forge']['pulls_url'])}" class="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50">Pull requests</a>
-      </nav>
-    </div>
-  </header>
+  <blt-nav project="blt-pool" name="Pool" data-sticky>
+    <a href="/">Mentors</a>
+    <a href="/leaderboard" aria-current="page">Leaderboard</a>
+    <a href="/github-app">GitHub App</a>
+    <a href="{esc(data['forge']['pulls_url'])}" slot="actions">Pull requests</a>
+  </blt-nav>
   <main class="mx-auto max-w-6xl px-4 py-8">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h2 class="text-2xl font-extrabold">Pull request leaderboard &middot; {esc(title_month)}</h2>
         <p class="mt-1 text-sm text-gray-600">Pull requests, reviews and comments on
-          <a class="text-[#E10101] underline" href="{esc(data['forge']['pulls_url'])}">git.owaspblt.org</a>, combined with each person's earlier GitHub activity.</p>
+          <a class="text-[#dc2626] underline" href="{esc(data['forge']['pulls_url'])}">git.owaspblt.org</a>, combined with each person's earlier GitHub activity.</p>
       </div>
       <div class="flex gap-2 text-sm">
         <a href="/leaderboard?month={prev_month}" class="rounded-lg border border-[#E5E5E5] bg-white px-3 py-1.5 hover:bg-gray-50">&larr; Previous</a>
@@ -6728,7 +6472,7 @@ async def on_fetch(request, env, ctx=None) -> Response:
 
     if path == CRON_DISPATCH_PATH:
         return await _handle_cron_dispatch(request, env)
-    if path == "/logo-sm.png" or path.endswith("logo-sm.png"):
+    if path in ("/blt-logo.svg", "/blt-pool-logo.svg"):
         return await env.ASSETS.fetch(request)
 
     admin_response = await AdminService(env).handle(request)
@@ -6861,208 +6605,21 @@ async def on_fetch(request, env, ctx=None) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# Scheduled event handler — runs on cron triggers
+# Scheduled event handler — called by blt-cron through POST /__scheduled
 # ---------------------------------------------------------------------------
-
-
-async def _run_scheduled(env):
-    """Handle scheduled cron events to check and unassign stale issues.
-    
-    This runs periodically (configured in wrangler.toml) to find issues that:
-    - Have assignees
-    - Were assigned more than ASSIGNMENT_DURATION_HOURS ago
-    - Have no linked pull requests
-    
-    Such issues are automatically unassigned to free them up for other contributors.
-    """
-    console.log("[CRON] Starting stale assignment check...")
-    
-    try:
-        # Get GitHub App installation token
-        app_id = getattr(env, "APP_ID", "")
-        private_key = getattr(env, "PRIVATE_KEY", "")
-        
-        if not app_id or not private_key:
-            console.error("[CRON] Missing APP_ID or PRIVATE_KEY")
-            return
-        
-        # For cron jobs, we need to iterate through all installations
-        # Get an app JWT first
-        jwt_token = await create_github_jwt(app_id, private_key)
-        
-        # Fetch all installations
-        installations_resp = await github_api("GET", "/app/installations", jwt_token)
-        if installations_resp.status != 200:
-            console.error(f"[CRON] Failed to fetch installations: {installations_resp.status}")
-            return
-        
-        installations = json.loads(await installations_resp.text())
-        console.log(f"[CRON] Found {len(installations)} installations")
-        
-        for installation in installations:
-            install_id = installation["id"]
-            account = installation["account"]
-            account_login = account.get("login", "unknown")
-            
-            console.log(f"[CRON] Processing installation {install_id} for {account_login}")
-            
-            # Get installation token
-            token = await get_installation_access_token(install_id, jwt_token)
-            if not token:
-                console.error(f"[CRON] Failed to get token for installation {install_id}")
-                continue
-            
-            # Fetch all repos for this installation (limit to 20 for cron to prevent timeouts)
-            repos = []
-            if account.get("type") == "Organization":
-                repos = await _fetch_org_repos(account_login, token, limit=20)
-            else:
-                # For user accounts, fetch user repos (limited)
-                repos_resp = await github_api("GET", f"/users/{account_login}/repos?per_page=20", token)
-                if repos_resp.status == 200:
-                    repos = json.loads(await repos_resp.text())
-            
-            console.log(f"[CRON] Checking {len(repos)} repositories")
-            
-            # Check each repository for stale assignments
-            for repo_data in repos:
-                repo_name = repo_data["name"]
-                owner = repo_data["owner"]["login"]
-                
-                await _check_stale_assignments(owner, repo_name, token)
-                await _check_stale_mentor_assignments(owner, repo_name, token)
-        
-        console.log("[CRON] Stale assignment check complete")
-        
-    except Exception as e:
-        console.error(f"[CRON] Error during scheduled task: {e}")
 
 
 async def on_scheduled(controller, env, ctx=None):
     """Cloudflare Python Workers cron entrypoint.
 
     blt-cron sends ``task: "forge-leaderboard"`` every 20 minutes (forge pulls ledger into the
-    leaderboard); calls without a task run the stale-assignment check.
+    leaderboard). Nothing else is scheduled: the 2-hourly stale-assignment sweep over every GitHub
+    App installation was removed (issue #38). It polled the OWASP-BLT GitHub repositories, which are
+    frozen copies now, and stale ``/assign`` claims on git.owaspblt.org are released by BLT-Action
+    (``blt-action/forge/stale.mjs``). A call without a known task does nothing.
     """
-    if str(getattr(controller, "task", "") or "") == FORGE_LEADERBOARD_TASK:
+    task = str(getattr(controller, "task", "") or "")
+    if task == FORGE_LEADERBOARD_TASK:
         await _run_forge_leaderboard_sync(env)
         return
-    await _run_scheduled(env)
-
-
-async def scheduled(event, env):
-    """Backward-compatible alias for runtimes expecting scheduled()."""
-    await _run_scheduled(env)
-
-
-async def _check_stale_assignments(owner: str, repo: str, token: str):
-    """Check a repository for stale issue assignments and unassign them."""
-    try:
-        # Fetch open issues with assignees
-        issues_resp = await github_api(
-            "GET",
-            f"/repos/{owner}/{repo}/issues?state=open&per_page=100",
-            token
-        )
-        
-        if issues_resp.status != 200:
-            return
-        
-        issues = json.loads(await issues_resp.text())
-        
-        # Filter issues that have assignees and are not pull requests
-        assigned_issues = [
-            issue for issue in issues
-            if issue.get("assignees") and "pull_request" not in issue
-        ]
-        
-        if not assigned_issues:
-            return
-        
-        console.log(f"[CRON] Found {len(assigned_issues)} assigned issues in {owner}/{repo}")
-        
-        current_time = time.time()
-        deadline_seconds = ASSIGNMENT_DURATION_HOURS * 3600
-        
-        for issue in assigned_issues:
-            issue_number = issue["number"]
-            assignees = issue.get("assignees", [])
-            
-            # Check if issue has linked PRs
-            timeline_resp = await github_api(
-                "GET",
-                f"/repos/{owner}/{repo}/issues/{issue_number}/timeline",
-                token
-            )
-            
-            if timeline_resp.status != 200:
-                continue
-            
-            timeline = json.loads(await timeline_resp.text())
-            
-            # Look for assignment events and cross-referenced PRs
-            assignment_time = None
-            has_linked_pr = False
-            
-            for event in timeline:
-                event_type = event.get("event")
-                
-                # Track the most recent assignment
-                if event_type == "assigned":
-                    created_at = event.get("created_at", "")
-                    if created_at:
-                        event_timestamp = _parse_github_timestamp(created_at)
-                        if event_timestamp:
-                            assignment_time = event_timestamp
-                
-                # Check for cross-referenced PRs
-                if event_type == "cross-referenced":
-                    source = event.get("source", {})
-                    if source.get("type") == "issue" and "pull_request" in source.get("issue", {}):
-                        has_linked_pr = True
-                        break
-            
-            # If no assignment time found in timeline, use updated_at as fallback
-            if assignment_time is None:
-                updated_at = issue.get("updated_at", "")
-                if updated_at:
-                    assignment_time = _parse_github_timestamp(updated_at)
-            
-            # Skip if we couldn't determine assignment time
-            if assignment_time is None:
-                continue
-            
-            time_elapsed = current_time - assignment_time
-            
-            # Unassign if deadline passed and no linked PR
-            if time_elapsed > deadline_seconds and not has_linked_pr:
-                hours_elapsed = int(time_elapsed / 3600)
-                
-                console.log(
-                    f"[CRON] Unassigning stale issue {owner}/{repo}#{issue_number} "
-                    f"(assigned {hours_elapsed}h ago, no PR)"
-                )
-                
-                # Unassign all assignees
-                assignee_logins = [a["login"] for a in assignees]
-                await github_api(
-                    "DELETE",
-                    f"/repos/{owner}/{repo}/issues/{issue_number}/assignees",
-                    token,
-                    {"assignees": assignee_logins}
-                )
-                
-                # Post a comment explaining the unassignment
-                assignee_mentions = ", ".join(f"@{login}" for login in assignee_logins)
-                await create_comment(
-                    owner, repo, issue_number,
-                    f"{assignee_mentions} This issue has been automatically unassigned because "
-                    f"the {ASSIGNMENT_DURATION_HOURS}-hour deadline has passed without a linked pull request.\n\n"
-                    f"The issue is now available for others to claim. If you'd still like to work on this, "
-                    f"please comment `{ASSIGN_COMMAND}` again.\n\n"
-                    "Thank you for your interest! 🙏 — [OWASP BLT-Pool](https://pool.owaspblt.org)",
-                    token
-                )
-    
-    except Exception as e:
-        console.error(f"[CRON] Error checking {owner}/{repo}: {e}")
+    console.log(f"[CRON] nothing scheduled for task {task!r}; ignored")

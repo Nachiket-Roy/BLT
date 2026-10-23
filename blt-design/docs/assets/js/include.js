@@ -31,7 +31,7 @@ function normalizePath(path) {
 
 function setActive(link) {
   link.classList.remove('text-slate-600', 'hover:bg-slate-50', 'hover:text-slate-900');
-  link.classList.add('blt-active', 'bg-[#feeae9]', 'font-semibold', 'text-red-600');
+  link.classList.add('blt-active', 'bg-red-50', 'font-semibold', 'text-red-600');
 
   const icon = link.querySelector('i');
   if (icon) {
@@ -75,21 +75,6 @@ function wireDocLinks(root) {
       link.setAttribute('aria-current', 'page');
     }
   }
-}
-
-for (const link of rootLinks) {
-  const path = link.getAttribute('data-root-link');
-  if (!path) continue;
-
-  const href = `${siteBase}${path}`;
-  link.setAttribute('href', href);
-
-  const targetPath = normalizePath(new URL(href, window.location.origin).pathname);
-  if (current === targetPath) {
-    setActive(link);
-    link.setAttribute('aria-current', 'page');
-  }
-}
 }
 
 function wireAssets(root) {

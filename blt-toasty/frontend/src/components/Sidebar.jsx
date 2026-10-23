@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -6,8 +6,6 @@ import {
   Lock,
   Activity,
   Settings,
-  Menu,
-  X,
   Home,
 } from 'lucide-react';
 
@@ -37,8 +35,8 @@ const navigation = [
   // },
 ];
 
+// Wide screens only: on phones these links are in the shared OWASP BLT bar's menu (BarLinks).
 export default function Sidebar() {
-  const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
   const navContent = (
@@ -83,7 +81,6 @@ export default function Sidebar() {
                   <NavLink
                     key={item.path}
                     to={item.path}
-                    onClick={() => setMobileOpen(false)}
                     className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors duration-150 ${
                       isActive
                         ? 'bg-nav-active font-semibold text-brand'
@@ -116,37 +113,8 @@ export default function Sidebar() {
   );
 
   return (
-    <>
-      {/* Mobile hamburger */}
-      <button
-        className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-border bg-white shadow-soft lg:hidden"
-        onClick={() => setMobileOpen(!mobileOpen)}
-        aria-label="Toggle navigation"
-      >
-        {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-      </button>
-
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* Mobile sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-neutral-border bg-white transition-transform duration-300 lg:hidden ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {navContent}
-      </aside>
-
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:w-72 lg:flex-col border-r border-neutral-border bg-white">
-        {navContent}
-      </aside>
-    </>
+    <aside className="hidden lg:flex lg:w-72 lg:flex-col border-r border-neutral-border bg-white">
+      {navContent}
+    </aside>
   );
 }

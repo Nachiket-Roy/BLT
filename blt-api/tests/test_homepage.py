@@ -12,7 +12,7 @@ import pytest
 # Add src to path for imports to work
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from handlers.homepage import handle_blt_api_logo, handle_dashboard, handle_homepage
+from handlers.homepage import handle_blt_api_logo, handle_blt_api_logo_svg, handle_dashboard, handle_homepage
 
 
 class MockRequest:
@@ -54,8 +54,10 @@ class TestHomepageHandler:
         assert "Build with" in content
         assert "Everything you need to test a route" in content
         assert "The dashboard keeps route docs" in content
-        assert 'src="/blt-api.png"' in content
-        assert 'src="/blt-api.svg"' not in content
+        # One header: the project's symbol and links come from the shared bar.
+        assert '<blt-nav project="blt-api" name="API"' in content
+        assert 'id="mobile-menu"' not in content
+        assert 'src="/blt-api.png"' not in content
 
     @pytest.mark.asyncio
     async def test_homepage_links_to_dashboard_route_not_html_or_v2_page(self):
@@ -89,6 +91,20 @@ class TestHomepageHandler:
         assert "image/png" in response.headers["Content-Type"]
         assert isinstance(response.body, bytes)
         assert response.body.startswith(b"\x89PNG\r\n\x1a\n")
+
+    @pytest.mark.asyncio
+    async def test_blt_api_svg_logo_asset_is_served(self):
+        response = await handle_blt_api_logo_svg(
+            MockRequest(url="https://blt-api.workers.dev/blt-api.svg"),
+            MockEnv(),
+            path_params={},
+            query_params={},
+            path="/blt-api.svg",
+        )
+
+        assert response.status == 200
+        assert "image/svg+xml" in response.headers["Content-Type"]
+        assert b"<svg" in response.body
 
 
 class TestDashboardHandler:
@@ -162,8 +178,8 @@ class TestDashboardHandler:
         assert "apiKeyList" in content
         assert "X-BLT-API-Key" in content
         assert "blt-dashboard-api-key" in content
-        assert 'src="/blt-api.png"' in content
-        assert 'src="/blt-api.svg"' not in content
+        assert 'src="/blt-api.svg"' in content
+        assert 'src="/blt-api.png"' not in content
 
     @pytest.mark.asyncio
     async def test_dashboard_mobile_route_catalog_uses_hamburger_menu(self):
@@ -172,8 +188,13 @@ class TestDashboardHandler:
         assert 'id="mobileNavToggle"' in content
         assert 'aria-controls="sidebar"' in content
         assert "hidden md:flex" in content
-        assert "fixed inset-0 z-40" in content
-        assert "id=\"mobileThemeToggle\"" in content
+        # Full-screen route catalog on phones sits above the shared bar (z-index 1000).
+        assert "fixed inset-0 z-[1050]" in content
+        # One header: the route menu button and account button live in the shared bar.
+        assert '<blt-nav project="blt-api" name="API"' in content
+        assert "<header" not in content
+        # The theme toggle lives in the shared OWASP BLT bar (<blt-nav>), not in this page.
+        assert "id=\"mobileThemeToggle\"" not in content
         assert "mobileHealthLink" in content
         assert "function closeMobileNav()" in content
 
@@ -244,6 +265,7 @@ class TestDashboardHandler:
             route_paths = {(route.method, route.pattern) for route in main.router.routes}
             assert ("GET", "/dashboard") in route_paths
             assert ("GET", "/blt-api.png") in route_paths
+            assert ("GET", "/blt-api.svg") in route_paths
             assert ("GET", "/dashboard.html") not in route_paths
             assert ("GET", "/v2/dashboard") not in route_paths
             assert ("GET", "/v2/dashboard.html") not in route_paths

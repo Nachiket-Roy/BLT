@@ -1,5 +1,6 @@
 {
     "assignees": [
+        "dahahanish",
         "himaneeesh"
     ],
     "author": "s_63h0z_rn9tGX5c93aI9sgKHb1iJO4JwP9NvPMuXsE",
@@ -83,6 +84,61 @@
             "sig": "K0iZ-XCaZh9pciuMyh5dtgzq2GjmiA-ZKMe_dE5xLNkOiDxKubfkGKEajyudzXTpyQ629_optxvFGEGmPSheDA",
             "ts": 1792495723140,
             "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@himaneeesh there's been no pull request or comment from you here for 18 hours. If you're still working on this issue, please comment with an update or open a pull request; otherwise you'll be unassigned in about 6 hours so someone else can pick it up. \u003c!-- blt-assign-stale-warning:himaneeesh:1792495723140 --\u003e",
+            "id": "actions-1792637596121-s2XK_a4G",
+            "sig": "en3RogWx6niuqcKqSZ6sdEzKef9DdNOJT4VEuKm8QHr_PH3elMvCwyZu-nDgC9VA7vBgFuEwQajBFc7AxaBWCQ",
+            "ts": 1792637596121,
+            "type": "comment"
+        },
+        {
+            "assignee": "himaneeesh",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "actions-1792659190998-TdZnRjSu",
+            "sig": "0Vv1gfU3ulPrgmLrw3YYsG98vtilw6il3qdRnkhaE4snrWWZY4ovI9o4RIh2e0fkWNZbz9zpiXrhyBEuLmBsDw",
+            "ts": 1792659190998,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@himaneeesh you've been unassigned from this issue because there was no pull request or update for 24 hours. It's open for others now; comment `/assign` to take it again. \u003c!-- blt-assign-stale:himaneeesh:1792495723140 --\u003e",
+            "id": "actions-1792659191050-kKhxvUYi",
+            "sig": "MkxjvFdOfDy4QnV0CzAEwypMb9U9s-fV1YRxebFLovmwgN43BbAY9iY8f93zFwayexgQPKg9takWAEN6PB8kCg",
+            "ts": 1792659191050,
+            "type": "comment"
+        },
+        {
+            "assignee": "dahahanish",
+            "author": "EqNbJ81Ib7tk86tkz55_EDo4gCk4z8HvrLf8ewzPc5c",
+            "authorName": "dahahanish",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1792690162209-yqos8m",
+            "sig": "QfbA6JszrMU9sTcwJcgngvHjHoXJyjmvTeFj8lWzuc9w-qdrOF1yfSBDcqx5KzaWeKzVwM2yoi9IgOM33U_gAA",
+            "ts": 1792690162209,
+            "type": "claim"
+        },
+        {
+            "assignee": "himaneeesh",
+            "author": "qqE-1kxevm_0FmZdXm0zGrUSJqSDMH8FpslKgZ1oF6A",
+            "authorName": "himaneeesh",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1792741617690-1p6y7j4",
+            "sig": "ofKguQf8T7HRErZjWTpFU4QDcEpzwxgdPkkj00fgN50g-CibeVtS298hu8Vcx-XERFd9G456PDusDwGnWesXAg",
+            "ts": 1792741617690,
+            "type": "claim"
         }
     ],
     "labels": [
@@ -97,6 +153,6 @@
     "startDate": 0,
     "status": "open",
     "title": "blt-toasty: Build Slack Notification Bot",
-    "updatedAt": 1792495723140,
+    "updatedAt": 1792741617690,
     "votes": 0
 }

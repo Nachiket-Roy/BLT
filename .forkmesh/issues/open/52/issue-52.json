@@ -1,5 +1,7 @@
 {
-    "assignees": [],
+    "assignees": [
+        "navodit"
+    ],
     "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
     "authorName": "blt-tasks[bot]",
     "bountyAddress": "",
@@ -12,7 +14,7 @@
             "attachments": [],
             "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
             "authorName": "blt-tasks[bot]",
-            "body": "## Context\n\n`src/cron.js:39` does `fields[4].replace(/\\b7\\b/g, \"0\")`, which turns `1-7` into `1-0` and then fails the `lo > hi` check, so `parseCron(\"0 0 * * 1-7\")` throws `bad value in \"1-0\"` (so does `5-7`). The comment says \"0 or 7 = Sunday\".\n\n## What to do\n\n1. Parse the day-of-week field with range [0,7], then map 7 to 0 in the resulting set.\n2. Add cases to the \"cron matching\" test in `test/cron.test.js`.\n\n## Acceptance criteria\n\n- [ ] `1-7`, `5-7` and `*/7` parse\n- [ ] `1-7` matches every day\n- [ ] Existing tests pass\n\n## How to test locally\n\n```bash\nscripts/ci/test.sh blt-cron\n```\n\n---\nSize: **S** · good first issue. Comment `/assign` to claim this issue; claims with no activity are released after 7 days. Clone from https://git.owaspblt.org/BLT.git and open your pull request there.\n",
+            "body": "## Context\n\n`src/cron.js:39` does `fields[4].replace(/\\b7\\b/g, \"0\")`, which turns `1-7` into `1-0` and then fails the `lo \u003e hi` check, so `parseCron(\"0 0 * * 1-7\")` throws `bad value in \"1-0\"` (so does `5-7`). The comment says \"0 or 7 = Sunday\".\n\n## What to do\n\n1. Parse the day-of-week field with range [0,7], then map 7 to 0 in the resulting set.\n2. Add cases to the \"cron matching\" test in `test/cron.test.js`.\n\n## Acceptance criteria\n\n- [ ] `1-7`, `5-7` and `*/7` parse\n- [ ] `1-7` matches every day\n- [ ] Existing tests pass\n\n## How to test locally\n\n```bash\nscripts/ci/test.sh blt-cron\n```\n\n---\nSize: **S** · good first issue. Comment `/assign` to claim this issue; claims with no activity are released after 7 days. Clone from https://git.owaspblt.org/BLT.git and open your pull request there.\n",
             "id": "blt-tasks-issue-52",
             "sig": "xxj6Ecj6sLJXgIOzFpD93mw1PpwLDx7NLxUy4fYUbCerZdXCqhhwHVC1ua8r8ngnP1PjxjhOfTp5ztp4QZr4Cw",
             "title": "blt-cron: parseCron rejects day-of-week ranges ending in 7 (e.g. \"1-7\")",
@@ -32,6 +34,61 @@
             "sig": "7VNpdJ0TprqJpnbbkM18rRe44o0up8I4nQwREupOV_r5V1WPJ-cU-wO8uazxCSPhrVlQzX3yPcHlswIKnIYXCw",
             "ts": 1792547523380,
             "type": "labels"
+        },
+        {
+            "attachments": [],
+            "author": "FTSqIIVcAz6yrEUfHk8wm1rr_FLa2bBVWJKeRKZCwcQ",
+            "authorName": "navodit",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "comment-web-1792656726076",
+            "sig": "2NsM9aWAGen8B5oUXUTvuY6uCvpA1-BiTJr2Q2JyMEOKC-y7aHrNxZ7UfEyYGv6-Gp-ZQ63CMxCKozRBdGM5AQ",
+            "ts": 1792656726076,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@navodit you can't be assigned to this issue because you are already assigned to #26. Please open a pull request for it, or comment `/unassign` there, before taking another issue. \u003c!-- blt-assign-refused:navodit --\u003e \u003c!-- blt-assign:6a6d4d682efcac025d65 --\u003e",
+            "id": "actions-1792656742445-JQYLCmqI",
+            "sig": "Q_11PQHQZyoXtJFpWvo-jVx293BTroGrnLGXwWYjPY5UdkSapeos86mC3Rhfcg-RrgcGUio2vbqNW4JVXHTdDg",
+            "ts": 1792656742445,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "FTSqIIVcAz6yrEUfHk8wm1rr_FLa2bBVWJKeRKZCwcQ",
+            "authorName": "navodit",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "comment-web-1792735764517",
+            "sig": "1v2cAIldcaiv96H2eWAmb1JmhSPEBEdPjmHtDWWoHuJgAKImkI5wKYQUynltSUlHkV86cYGx3SOBoTkb8C8jBA",
+            "ts": 1792735764517,
+            "type": "comment"
+        },
+        {
+            "assignee": "navodit",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "actions-1792735784721-z01dt1Ft",
+            "sig": "hCel7c2ZoOb5sxc9lUCnTYKvTAzikGfC6bu8ZQ5gxjJci3I3PS6FeQJNhHUwigwbaVNkqYPG6KZwBXUTAKAEBg",
+            "ts": 1792735784721,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@navodit you're assigned to this issue. Please open a pull request for it within 24 hours. Without a pull request or an update from you here for 24 hours, you'll be unassigned (after a warning). If you stop working on it, comment `/unassign` so someone else can pick it up. \u003c!-- blt-assign:7dd6b9971c33feb82765 --\u003e",
+            "id": "actions-1792735784848-WJhLF6Kb",
+            "sig": "08GpWSwDP5om4_xQEXg8DSTqEAC_d3KI0fbEWO-Gr2lYWcBeHy77mGI33MvG9pvw5xqCwpAytfRex7N93bK_Cg",
+            "ts": 1792735784848,
+            "type": "comment"
         }
     ],
     "labels": [
@@ -48,6 +105,6 @@
     "startDate": 0,
     "status": "open",
     "title": "blt-cron: parseCron rejects day-of-week ranges ending in 7 (e.g. \"1-7\")",
-    "updatedAt": 1792547523380,
+    "updatedAt": 1792735784848,
     "votes": 0
 }

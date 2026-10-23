@@ -11,7 +11,8 @@
     />
     <script>
       (function () {
-        var savedTheme = localStorage.getItem("blt-theme");
+        // owaspblt.org theme contract (shared with the <blt-nav> bar); "blt-theme" was this page's old key.
+        var savedTheme = localStorage.getItem("theme") || localStorage.getItem("blt-theme");
         var prefersDark =
           window.matchMedia &&
           window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -21,20 +22,21 @@
       })();
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
     <script>
       tailwind.config = {
         darkMode: "class",
         theme: {
           extend: {
             colors: {
-              "slate-950": "#09090b",
-              "slate-900": "#18181b",
-              "slate-800": "#27272a",
-              "slate-700": "#3f3f46",
-              "slate-600": "#52525b",
-              "slate-400": "#a1a1aa",
-              "slate-200": "#e4e4e7",
-              "slate-100": "#f4f4f5",
+              "slate-950": "#030712",
+              "slate-900": "#111827",
+              "slate-800": "#1f2937",
+              "slate-700": "#374151",
+              "slate-600": "#4b5563",
+              "slate-400": "#9ca3af",
+              "slate-200": "#e5e7eb",
+              "slate-100": "#f3f4f6",
             },
           },
         },
@@ -54,10 +56,11 @@
       }
       body {
         font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, "Helvetica Neue", Arial, sans-serif;
       }
       .endpoint-code {
-        font-family: "Monaco", "Menlo", monospace;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         font-size: 12px;
       }
       .fade-enter {
@@ -88,12 +91,69 @@
   <body
     class="overflow-x-hidden bg-white dark:bg-slate-950 text-gray-900 dark:text-slate-100 transition-colors"
   >
+    <blt-nav project="blt-api" name="API" home="/">
+      <a href="/">Overview</a>
+      <a href="/dashboard" aria-current="page">Explorer</a>
+      <a href="[[API_BASE_URL]]/health">Health</a>
+      <button
+        id="mobileNavToggle"
+        type="button"
+        class="md:hidden"
+        aria-label="BLT API route menu"
+        aria-controls="sidebar"
+        aria-expanded="false"
+      >
+        Routes
+      </button>
+      <button
+        id="accountOpenButton"
+        type="button"
+        slot="actions"
+        class="inline-flex items-center gap-2"
+        aria-haspopup="menu"
+        aria-controls="profileMenu"
+        aria-expanded="false"
+      >
+        <span
+          id="accountAvatar"
+          class="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-red-50 text-[10px] font-bold text-red-700 ring-1 ring-red-100 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30"
+          aria-hidden="true"
+          >👤</span
+        >
+        <span id="accountStatusChip" class="max-w-[9rem] truncate sm:max-w-none"
+          >Sign up / Sign in</span
+        >
+      </button>
+    </blt-nav>
     <div
-      class="flex min-h-screen flex-col overflow-x-hidden md:h-screen md:flex-row md:overflow-hidden"
+      id="profileMenu"
+      class="absolute right-4 top-[58px] z-[1100] hidden w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+      role="menu"
+      aria-label="Profile menu"
+    >
+      <button
+        id="openProfileModalButton"
+        type="button"
+        class="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-gray-700 transition hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800"
+        role="menuitem"
+      >
+        Profile & API keys
+      </button>
+      <button
+        id="menuSignOutButton"
+        type="button"
+        class="mt-1 w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-red-700 transition hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+        role="menuitem"
+      >
+        Sign out
+      </button>
+    </div>
+    <div
+      class="flex min-h-screen flex-col overflow-x-hidden md:h-[calc(100vh-61px)] md:min-h-0 md:flex-row md:overflow-hidden"
     >
       <aside
         id="sidebar"
-        class="fixed inset-0 z-40 hidden md:flex w-full flex-none flex-col overflow-hidden border-r border-gray-200 bg-gray-50 dark:border-slate-800 dark:bg-slate-900 md:static md:z-auto md:w-64"
+        class="fixed inset-0 z-[1050] hidden md:flex w-full flex-none flex-col overflow-hidden border-r border-gray-200 bg-gray-50 dark:border-slate-800 dark:bg-slate-900 md:static md:z-auto md:w-64"
       >
         <div
           class="flex items-center gap-3 border-b border-gray-200 p-3 dark:border-slate-800 md:p-2"
@@ -103,7 +163,7 @@
             class="inline-flex min-w-0 items-center gap-2.5"
             aria-label="BLT API home"
           >
-            <img src="/blt-api.png" alt="BLT API logo" class="h-14" />
+            <img src="/blt-api.svg" alt="BLT API logo" width="56" height="56" class="h-14 w-14" />
             <div class="flex flex-col">
               <span
                 class="text-sm font-medium tracking-tight text-gray-900 dark:text-slate-100"
@@ -159,7 +219,7 @@
         <div
           class="p-4 border-t border-gray-200 dark:border-slate-800 text-xs text-gray-600 dark:text-slate-400"
         >
-          <div class="grid grid-cols-2 gap-2 md:hidden">
+          <div class="grid grid-cols-1 gap-2 md:hidden">
             <a
               id="mobileHealthLink"
               href="[[API_BASE_URL]]/health"
@@ -167,24 +227,6 @@
             >
               Health
             </a>
-            <button
-              id="mobileThemeToggle"
-              type="button"
-              class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-red-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-              aria-label="Toggle dark mode"
-            >
-              <svg
-                class="h-4 w-4"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-                aria-hidden="true"
-              >
-                <path
-                  d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"
-                ></path>
-              </svg>
-              Theme
-            </button>
           </div>
           <p
             id="endpointCount"
@@ -198,115 +240,18 @@
       <div
         class="flex min-w-0 flex-1 flex-col overflow-visible md:overflow-hidden"
       >
-        <header
-          class="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 md:px-8 md:py-4"
-        >
-          <button
-            id="mobileNavToggle"
-            type="button"
-            class="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-red-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 md:hidden"
-            aria-label="Open route menu"
-            aria-controls="sidebar"
-            aria-expanded="false"
-          >
-            <svg
-              class="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 6h16M4 12h16M4 18h16"
-              ></path>
-            </svg>
-          </button>
-          <h2
-            id="pageTitle"
-            class="min-w-0 flex-1 truncate text-lg font-bold sm:text-xl md:text-2xl"
-          >
-            BLT API Dashboard
-          </h2>
-          <div class="ml-auto flex flex-none items-center gap-2 sm:gap-3">
-            <a
-              href="[[API_BASE_URL]]/health"
-              class="hidden px-3 py-2 text-sm rounded border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-slate-100 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-red-600 dark:focus:ring-red-500 md:inline-flex"
-            >
-              Health
-            </a>
-            <div class="relative">
-              <button
-                id="accountOpenButton"
-                type="button"
-                class="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-                aria-haspopup="menu"
-                aria-controls="profileMenu"
-                aria-expanded="false"
-              >
-                <span
-                  id="accountAvatar"
-                  class="flex h-7 w-7 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-700 ring-1 ring-red-100 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30"
-                  aria-hidden="true"
-                  >👤</span
-                >
-                <span
-                  id="accountStatusChip"
-                  class="max-w-[9rem] truncate sm:max-w-none"
-                  >Sign up / Sign in</span
-                >
-              </button>
-              <div
-                id="profileMenu"
-                class="absolute right-0 z-40 mt-2 hidden w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900"
-                role="menu"
-                aria-label="Profile menu"
-              >
-                <button
-                  id="openProfileModalButton"
-                  type="button"
-                  class="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-gray-700 transition hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                  role="menuitem"
-                >
-                  Profile & API keys
-                </button>
-                <button
-                  id="menuSignOutButton"
-                  type="button"
-                  class="mt-1 w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-red-700 transition hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
-                  role="menuitem"
-                >
-                  Sign out
-                </button>
-              </div>
-            </div>
-            <button
-              id="themeToggle"
-              type="button"
-              class="hidden p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-red-600 dark:focus:ring-red-500 md:inline-flex"
-              aria-label="Toggle dark mode"
-            >
-              <svg
-                class="w-5 h-5"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-                aria-hidden="true"
-              >
-                <path
-                  d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"
-                ></path>
-              </svg>
-            </button>
-          </div>
-        </header>
 
         <main
           class="flex min-h-0 flex-1 flex-col gap-4 overflow-visible p-4 md:flex-row md:gap-6 md:overflow-hidden md:p-8"
         >
           <div class="min-w-0 flex-1 overflow-visible md:overflow-y-auto">
             <div class="space-y-4 md:pr-2">
+              <h1
+                id="pageTitle"
+                class="min-w-0 truncate text-lg font-bold sm:text-xl md:text-2xl"
+              >
+                BLT API Dashboard
+              </h1>
               <section
                 class="grid gap-3 md:grid-cols-3"
                 aria-label="API status"
@@ -575,7 +520,7 @@
     <!-- ── Auth Modal (sign in / create account) ──────────────────────── -->
     <div
       id="authModal"
-      class="fixed inset-0 z-50 hidden flex items-start justify-center overflow-y-auto p-3 py-6 sm:items-center sm:p-4 sm:pt-12"
+      class="fixed inset-0 z-[1100] hidden flex items-start justify-center overflow-y-auto p-3 py-6 sm:items-center sm:p-4 sm:pt-12"
       role="dialog"
       aria-modal="true"
       aria-labelledby="authModalTitle"
@@ -839,7 +784,7 @@
     <!-- ── Profile Modal (signed-in users) ────────────────────────────── -->
     <div
       id="profileModal"
-      class="fixed inset-0 z-50 hidden flex items-start justify-center overflow-y-auto p-3 py-6 sm:items-center sm:p-4"
+      class="fixed inset-0 z-[1100] hidden flex items-start justify-center overflow-y-auto p-3 py-6 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="profileModalTitle"
@@ -964,7 +909,6 @@
       const API_KEY_STORAGE_KEY = "blt-dashboard-api-key";
       const SESSION_TOKEN_STORAGE_KEY = "blt-dashboard-session-token";
       const SESSION_USERNAME_STORAGE_KEY = "blt-dashboard-session-username";
-      const THEME_STORAGE_KEY = "blt-theme";
       const DEMO_RESPONSE_DELAY_MS = 450;
       let activeRoute = null;
       let sessionToken = "";
@@ -2684,8 +2628,6 @@
         refreshStatsButton: document.getElementById("refreshStatsButton"),
         accountOpenButton: document.getElementById("accountOpenButton"),
         accountStatusChip: document.getElementById("accountStatusChip"),
-        themeToggle: document.getElementById("themeToggle"),
-        mobileThemeToggle: document.getElementById("mobileThemeToggle"),
         consoleMethodBadge: document.getElementById("consoleMethodBadge"),
         baseUrlInput: document.getElementById("baseUrlInput"),
         methodInput: document.getElementById("methodInput"),
@@ -4068,11 +4010,6 @@
         setRequestStatus("Sample body restored.", "success");
       }
 
-      function toggleTheme() {
-        var isDark = document.documentElement.classList.toggle("dark");
-        localStorage.setItem(THEME_STORAGE_KEY, isDark ? "dark" : "light");
-      }
-
       function wireEvents() {
         // ── Mobile nav ────────────────────────────────────────────────────
         if (elements.mobileNavToggle) {
@@ -4110,14 +4047,10 @@
         // ── Health / stats ────────────────────────────────────────────────
         elements.refreshHealthButton.addEventListener("click", loadHealth);
         elements.refreshStatsButton.addEventListener("click", loadStats);
-        // ── Theme toggle ──────────────────────────────────────────────────
-        elements.themeToggle.addEventListener("click", toggleTheme);
-        if (elements.mobileThemeToggle) {
-          elements.mobileThemeToggle.addEventListener("click", toggleTheme);
-        }
         // ── Header account button ─────────────────────────────────────────
-        elements.accountOpenButton.addEventListener("click", function (event) {
-          event.stopPropagation();
+        elements.accountOpenButton.addEventListener("click", function () {
+          // No stopPropagation: the shared bar closes its menu on this click, and the
+          // outside-click handler below ignores clicks on this button.
           if (sessionToken) {
             elements.profileMenu.classList.toggle("hidden");
           } else {

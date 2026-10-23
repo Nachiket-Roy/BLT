@@ -20,17 +20,18 @@
 {"@context":"https://schema.org","@type":"WebSite","description":"Open-source cybersecurity courses and browser labs maintained by the OWASP BLT community.","headline":"Home","name":"BLT University","url":"https://university.owaspblt.org/"}</script>
 <!-- End Jekyll SEO tag -->
 
-    <link rel="icon" type="image/png" href="/assets/images/blt-university-logo.png">
+    <link rel="icon" href="/assets/images/blt-university-logo.svg" type="image/svg+xml">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script>
-        // Dark mode theme
-        if (localStorage.getItem('theme') === 'dark') {
-            document.documentElement.classList.add('dark');
-        }
+        // Dark mode theme: saved choice (shared with the OWASP BLT top bar), else the system preference
+        (function () {
+            var saved = null;
+            try { saved = localStorage.getItem('theme'); } catch (e) {}
+            var dark = saved === 'dark' || (saved !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.classList.toggle('dark', dark);
+        })();
     </script>
     <script src="https://cdn.tailwindcss.com/3.4.17?plugins=typography@0.5.16"></script>
     <script>
@@ -39,7 +40,7 @@
             theme: {
                 extend: {
                     fontFamily: {
-                        sans: ['Geist', 'Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+                        sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
                         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
                     },
                     colors: {
@@ -59,23 +60,30 @@
         };
     </script>
     <style>
+        /* The OWASP BLT top bar (<blt-nav>, sticky) is the only header. */
+        blt-nav:not(:defined) { display: block; min-height: 61px; }
+        blt-nav:not(:defined) > * { display: none; }
+        /* Basic dark mode for pages without their own dark: variants (explicit dark: classes win). */
+        html.dark { color-scheme: dark; }
+        html.dark .bg-white { background-color: #111827; }
+        html.dark .bg-gray-50, html.dark .bg-\[\#fafafa\] { background-color: #030712; }
+        html.dark .bg-gray-100 { background-color: #1f2937; }
+        html.dark .bg-white\/40 { background-color: rgba(17, 24, 39, 0.6); }
+        html.dark .bg-red-50, html.dark .bg-red-50\/50 { background-color: rgba(127, 29, 29, 0.25); }
+        html.dark .from-red-50 { --tw-gradient-from: rgba(127, 29, 29, 0.25) var(--tw-gradient-from-position); --tw-gradient-to: transparent var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+        html.dark .to-white { --tw-gradient-to: #111827 var(--tw-gradient-to-position); }
+        html.dark .border-red-100, html.dark .border-red-200 { border-color: rgba(153, 27, 27, 0.5); }
+        html.dark .text-red-600, html.dark .text-red-700 { color: #f87171; }
+        html.dark .text-gray-900, html.dark .text-bltDark { color: #f3f4f6; }
+        html.dark .text-gray-800, html.dark .text-gray-700 { color: #d1d5db; }
+        html.dark .text-gray-600, html.dark .text-gray-500 { color: #9ca3af; }
+        html.dark .border-gray-100, html.dark .border-gray-200, html.dark .border-gray-300 { border-color: #1f2937; }
+        html.dark .dot-field { background-image: radial-gradient(rgba(243, 244, 246, 0.14) 1px, transparent 1px); }
         .dot-field {
             background-image: radial-gradient(rgba(17, 24, 39, 0.18) 1px, transparent 1px);
             background-size: 18px 18px;
             mask-image: radial-gradient(circle at center, black 0, transparent 74%);
             -webkit-mask-image: radial-gradient(circle at center, black 0, transparent 74%);
-        }
-        .mobile-menu.open {
-            display: flex;
-        }
-        .mobile-toggle.active span:nth-child(1) {
-            transform: translateY(6px) rotate(45deg);
-        }
-        .mobile-toggle.active span:nth-child(2) {
-            opacity: 0;
-        }
-        .mobile-toggle.active span:nth-child(3) {
-            transform: translateY(-6px) rotate(-45deg);
         }
         .feature-divider::before,
         .feature-divider::after {
@@ -153,147 +161,26 @@
         }
     </style>
 </head>
-<body class="min-h-screen overflow-x-hidden bg-gray-50 font-sans text-gray-900 antialiased selection:bg-red-100 selection:text-red-700 dark:bg-slate-950 dark:text-slate-100 flex flex-col">
+<body class="min-h-screen overflow-x-hidden bg-gray-50 font-sans text-gray-900 antialiased selection:bg-red-100 selection:text-red-700 dark:bg-gray-950 dark:text-gray-100 flex flex-col">
 
-    <header
-  class="fixed inset-x-0 top-0 z-50 border-b border-black/5 bg-white shadow-sm"
-  id="site-header"
->
-  <div
-    class="relative mx-auto flex max-w-[104rem] items-center justify-between gap-6 px-4 py-4 sm:px-6 lg:px-6 xl:px-6"
-  >
-    <a
-      href="/"
-      class="inline-flex items-center gap-2.5"
-      aria-label="BLT University home"
-    >
-      <img
-        src="/assets/images/blt-university-logo.png"
-        alt="BLT University logo"
-        class="h-12 sm:h-14"
-      />
-      <div class="flex flex-col">
-        <span class="text-sm font-semibold uppercase tracking-wide">BLT UNIVERSITY</span>
-      </div>
-    </a>
-
-    <nav
-      class="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-7 lg:flex"
-      aria-label="Primary navigation"
-    >
-      
-      
-      <a
-        class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-        href="/courses/"
-        >Courses</a
-      >
-      
-      <a
-        class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-        href="/labs/"
-        >Labs</a
-      >
-      
-      <a
-        class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-        href="/progress/"
-        >Progress</a
-      >
-      
-      <a
-        class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-        href="/dashboard/"
-        >Security Trends</a
-      >
-      
-      <a
-        class="text-sm leading-none text-gray-500 transition-colors duration-150 hover:text-gray-900"
-        href="/instructors/"
-        >Instructors</a
-      >
-      
-    </nav>
-
-    <div class="hidden items-center gap-3 lg:flex">
-      
-      
-      
-      <a
-        class="rounded-md px-3 py-2 text-sm text-gray-600 transition-colors duration-150 hover:bg-gray-100 hover:text-gray-900"
-        href="/request/"
-        >Request course</a
-      >
-      
-      
-      
-      <a
-        class="inline-flex items-center justify-center rounded-md border-b-[1.5px] border-red-700 bg-gradient-to-b from-red-500 to-red-600 px-4 py-2 text-sm font-medium text-white shadow-[0_10px_24px_-18px_rgba(220,38,38,.8)] transition duration-200 hover:-translate-y-px"
-        href="/enroll/"
-        >Enroll now</a
-      >
-      
-      
-    </div>
-
-    <button
-      class="mobile-toggle hidden h-8 w-8 cursor-pointer flex-col items-center justify-center gap-[5px] border-0 bg-transparent max-lg:flex"
-      id="mobile-toggle"
-      type="button"
-      aria-label="Toggle menu"
-      aria-expanded="false"
-      aria-controls="mobile-menu"
-    >
-      <span class="block h-px w-5 bg-gray-600 transition duration-200"></span>
-      <span class="block h-px w-5 bg-gray-600 transition duration-200"></span>
-      <span class="block h-px w-5 bg-gray-600 transition duration-200"></span>
-    </button>
-  </div>
-
-  <nav
-    class="mobile-menu hidden flex-col gap-4 border-t border-gray-100 bg-white px-6 py-4"
-    id="mobile-menu"
-    aria-label="Mobile navigation"
-  >
-    
-    <a class="text-sm text-gray-600 transition-colors hover:text-gray-900" href="/courses/">Courses</a>
-    
-    <a class="text-sm text-gray-600 transition-colors hover:text-gray-900" href="/labs/">Labs</a>
-    
-    <a class="text-sm text-gray-600 transition-colors hover:text-gray-900" href="/progress/">Progress</a>
-    
-    <a class="text-sm text-gray-600 transition-colors hover:text-gray-900" href="/dashboard/">Security Trends</a>
-    
-    <a class="text-sm text-gray-600 transition-colors hover:text-gray-900" href="/instructors/">Instructors</a>
-    
-    
-    
-    <a
-      class="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 transition duration-200 hover:border-gray-300 hover:bg-gray-50"
-      href="/request/"
-      >Request course</a
-    >
-    
-    
-    
-    <a
-      class="inline-flex items-center justify-center rounded-md border-b-[1.5px] border-red-700 bg-gradient-to-b from-red-500 to-red-600 px-5 py-3 text-sm font-medium text-white transition duration-200 hover:-translate-y-px"
-      href="/enroll/"
-      >Enroll now</a
-    >
-    
-    
-  </nav>
-</header>
+    <blt-nav project="blt-university" name="University" current="auto" data-sticky>
+  <a href="/courses/">Courses</a>
+  <a href="/labs/">Labs</a>
+  <a href="/progress/">Progress</a>
+  <a href="/dashboard/">Security Trends</a>
+  <a href="/instructors/">Instructors</a>
+  <a href="/request/" slot="actions">Request course</a>
+  <a href="/enroll/" slot="actions" data-primary>Enroll now</a>
+</blt-nav>
 
 
     <main>
   <section
-    class="relative flex min-h-[42rem] items-start justify-center px-4 pb-12 pt-48 max-md:min-h-[38rem] max-md:pt-34"
+    class="relative flex min-h-[42rem] items-start justify-center px-4 pb-12 pt-28 max-md:min-h-[38rem] max-md:pt-34"
     aria-label="Hero"
   >
     <div
-      class="dot-field pointer-events-none absolute inset-x-0 top-24 z-[1] mx-auto h-[34rem] w-full opacity-70"
+      class="dot-field pointer-events-none absolute inset-x-0 top-4 z-[1] mx-auto h-[34rem] w-full opacity-70"
       aria-hidden="true"
     ></div>
     <div class="relative z-[2] flex w-full min-w-0 flex-col items-center text-center">

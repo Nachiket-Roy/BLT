@@ -5,11 +5,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
   <title>OWASP SDLC Diagram - Mobile View</title>
+  <script src="theme-init.js"></script>
+  <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
   <link rel="stylesheet" href="styles.css" />
   <script src="mermaid.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
+    }
+
+    /* Height of the OWASP BLT bar (<blt-nav>) above the fixed diagram viewport. */
+    :root {
+      --blt-bar-h: 61px;
     }
 
     body {
@@ -19,70 +26,9 @@
       touch-action: manipulation;
     }
 
-    .mobile-header {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      background: var(--bg-secondary);
-      border-bottom: 2px solid var(--primary);
-      padding: 10px 15px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      z-index: 1000;
-      gap: 8px;
-    }
-
-    .mobile-header h1 {
-      font-size: 14px;
-      margin: 0;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      flex: 1;
-    }
-
-    .mobile-header-buttons {
-      display: flex;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-
-    .mobile-btn {
-      padding: 8px 12px;
-      border: none;
-      border-radius: 6px;
-      background: var(--primary);
-      color: white;
-      cursor: pointer;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      text-decoration: none;
-    }
-
-    .mobile-btn:hover,
-    .mobile-btn:active {
-      background: var(--primary-dark);
-    }
-
-    .mobile-btn-secondary {
-      background: var(--bg-tertiary);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .mobile-btn-secondary:hover,
-    .mobile-btn-secondary:active {
-      background: var(--border);
-    }
-
     .diagram-viewport {
       position: fixed;
-      top: 54px;
+      top: var(--blt-bar-h);
       left: 0;
       right: 0;
       bottom: 70px;
@@ -124,7 +70,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      z-index: 1000;
+      z-index: 999; /* under the OWASP BLT bar's open menu (z-index 1000) */
     }
 
     .zoom-btn {
@@ -163,7 +109,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      z-index: 1000;
+      z-index: 999; /* under the OWASP BLT bar's open menu (z-index 1000) */
     }
 
     .zoom-info {
@@ -232,7 +178,7 @@
     }
 
     .fullscreen .diagram-viewport {
-      top: 0;
+      top: var(--blt-bar-h);
       bottom: 0;
     }
 
@@ -289,26 +235,27 @@
     }
 
     /* Dark theme adjustments */
-    body.dark .zoom-btn {
+    html.dark .zoom-btn {
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
     }
   </style>
 </head>
 
 <body>
+  <blt-nav project="blt-owasp-metadata" name="Metadata" current="auto">
+    <a href="index.html">Explorer</a>
+    <a href="charts.html">Analytics</a>
+    <a href="diagram.html">Wayfinder</a>
+    <a href="mermaid-diagram.html">SDLC</a>
+    <a href="https://git.owaspblt.org/BLT/BLT-OWASP-Metadata" slot="actions" data-primary target="_blank" rel="noopener">Source code</a>
+  </blt-nav>
+
   <div class="loading-overlay" id="loading-overlay">
     <div class="loading-spinner"></div>
     <div class="loading-text">Loading SDLC diagram...</div>
   </div>
 
-  <header class="mobile-header">
-    <h1>🔄 OWASP SDLC Diagram</h1>
-    <div class="mobile-header-buttons">
-      <span class="project-badge" id="project-count">Loading...</span>
-      <a href="mermaid-diagram.html" class="mobile-btn mobile-btn-secondary" title="Desktop View">🖥️</a>
-      <button class="mobile-btn mobile-btn-secondary" id="toggle-theme" title="Toggle Theme">🌓</button>
-    </div>
-  </header>
+  <h1 class="visually-hidden">OWASP SDLC Diagram</h1>
 
   <div class="diagram-viewport" id="diagram-viewport">
     <div class="diagram-canvas" id="diagram-canvas">
@@ -336,6 +283,7 @@
       </div>
     </div>
     <div class="gesture-hint">Pinch to zoom • Drag to pan</div>
+    <span class="project-badge" id="project-count">Loading...</span>
     <div class="zoom-info" id="zoom-info">100%</div>
   </footer>
 
@@ -405,7 +353,7 @@
     // Initialize mermaid
     mermaid.initialize({
       startOnLoad: false,
-      theme: document.body.classList.contains('dark') ? 'dark' : 'base',
+      theme: document.documentElement.classList.contains('dark') ? 'dark' : 'base',
       securityLevel: 'loose',
       themeVariables: {
         primaryColor: '#34568b',
@@ -796,11 +744,9 @@
       updateTransform();
     }
 
-    // Toggle theme
+    // Theme changed (the toggle is in the OWASP BLT bar, which sets html.dark)
     function toggleTheme() {
-      document.body.classList.toggle('dark');
-      const isDark = document.body.classList.contains('dark');
-      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      const isDark = document.documentElement.classList.contains('dark');
 
       // Re-initialize mermaid with appropriate theme
       mermaid.initialize({
@@ -840,11 +786,6 @@
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
-      // Initialize theme from localStorage
-      if (localStorage.getItem('theme') === 'dark') {
-        document.body.classList.add('dark');
-      }
-
       // Set up event listeners
       const viewport = document.getElementById('diagram-viewport');
       viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -859,7 +800,7 @@
       document.getElementById('zoom-in').addEventListener('click', zoomIn);
       document.getElementById('zoom-out').addEventListener('click', zoomOut);
       document.getElementById('zoom-reset').addEventListener('click', fitToScreen);
-      document.getElementById('toggle-theme').addEventListener('click', toggleTheme);
+      window.addEventListener('blt-theme-change', toggleTheme);
 
       // Load data
       loadData();

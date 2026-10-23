@@ -326,7 +326,13 @@ function setupEventHandlers() {
         });
     }
 
-    // Theme Toggle
+    // Theme: the toggle is in the shared OWASP BLT bar (owaspblt.org/_shared/blt-nav.js),
+    // which flips html.dark and saves localStorage "theme"; pass the change on.
+    window.addEventListener('blt-theme-change', (e) => {
+        if (window.bltApp && window.bltApp.state) {
+            window.bltApp.state.emit('theme:changed', e.detail && e.detail.dark ? 'dark' : 'light');
+        }
+    });
     const themeToggle = document.getElementById('themeToggle');
     if (themeToggle) {
         themeToggle.addEventListener('click', () => {
@@ -455,6 +461,7 @@ function updateUIForAuth() {
             signupBtn.href = '#';
             signupBtn.classList.remove('btn-primary');
             signupBtn.classList.add('btn-secondary');
+            signupBtn.removeAttribute('data-primary'); // a plain button in the shared bar
             signupBtn.onclick = async (e) => {
                 e.preventDefault();
                 await auth.logout();
@@ -474,6 +481,7 @@ function updateUIForAuth() {
             signupBtn.href = authPagePath('signup');
             signupBtn.classList.remove('btn-secondary');
             signupBtn.classList.add('btn-primary');
+            signupBtn.setAttribute('data-primary', ''); // the red button in the shared bar
             signupBtn.onclick = null;
         }
     }

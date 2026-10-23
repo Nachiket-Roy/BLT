@@ -9,7 +9,6 @@
 ──────────────────────────────────────────────────────────── */
 document.addEventListener("DOMContentLoaded", () => {
   initDarkMode();
-  initMobileMenu();
   initAnonymousToggle();
   loadLeaderboard();
   loadRecentBugs();
@@ -28,59 +27,11 @@ const NEW_BUG_URL = BLT_CONFIG.NEW_ISSUE_URL || `${FORGE_URL}/issues/new`;
    Dark Mode
 ──────────────────────────────────────────────────────────── */
 function initDarkMode() {
-  const html = document.documentElement;
-  const btn = document.getElementById("dark-toggle");
-  if (!btn) return;
-
-  // Restore saved preference (or system preference)
-  const saved = localStorage.getItem("blt-theme");
-  if (saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-    html.classList.add("dark");
-  }
-
-  btn.addEventListener("click", () => {
-    html.classList.toggle("dark");
-    localStorage.setItem("blt-theme", html.classList.contains("dark") ? "dark" : "light");
-    bltCapture("dark_mode_toggled", { to_dark: html.classList.contains("dark"), page: "homepage" });
+  // The theme toggle lives in the shared <blt-nav> bar (owaspblt.org/_shared/blt-nav.js), which sets
+  // html.dark and localStorage "theme"; the pre-paint script in <head> applies the saved choice.
+  window.addEventListener("blt-theme-change", (e) => {
+    bltCapture("dark_mode_toggled", { to_dark: !!(e.detail && e.detail.dark), page: "homepage" });
   });
-}
-
-/* ────────────────────────────────────────────────────────────
-   Mobile Menu
-──────────────────────────────────────────────────────────── */
-function initMobileMenu() {
-  const toggle = document.getElementById("mobile-menu-toggle");
-  const menu = document.getElementById("mobile-menu");
-  if (!toggle || !menu) return;
-
-  const desktopBreakpoint = window.matchMedia("(min-width: 1024px)");
-  const syncMenuState = () => {
-    if (desktopBreakpoint.matches) {
-      menu.classList.add("hidden");
-      toggle.setAttribute("aria-expanded", "false");
-    }
-  };
-
-  toggle.addEventListener("click", () => {
-    const open = menu.classList.toggle("hidden");
-    toggle.setAttribute("aria-expanded", String(!open));
-  });
-
-  if (typeof desktopBreakpoint.addEventListener === "function") {
-    desktopBreakpoint.addEventListener("change", syncMenuState);
-  } else {
-    desktopBreakpoint.addListener(syncMenuState);
-  }
-
-  // Close when a nav link is clicked
-  menu.querySelectorAll("a").forEach((link) => {
-    link.addEventListener("click", () => {
-      menu.classList.add("hidden");
-      toggle.setAttribute("aria-expanded", "false");
-    });
-  });
-
-  syncMenuState();
 }
 
 /* ────────────────────────────────────────────────────────────

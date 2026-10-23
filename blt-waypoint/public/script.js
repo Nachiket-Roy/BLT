@@ -73,25 +73,7 @@ let currentDataSource = 'main';
 /* ------------------------------------------------------------------ */
 /*  DARK MODE                                                           */
 /* ------------------------------------------------------------------ */
-(function initDark() {
-  const saved = localStorage.getItem('blt-dark');
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  if (saved === 'dark' || (!saved && prefersDark)) {
-    document.documentElement.classList.add('dark');
-    const icon = document.getElementById('dark-icon');
-    if (icon) icon.className = 'fa-solid fa-sun text-sm';
-  }
-})();
-
-const darkToggle = document.getElementById('dark-toggle');
-if (darkToggle) darkToggle.addEventListener('click', () => {
-  const isDark = document.documentElement.classList.toggle('dark');
-  localStorage.setItem('blt-dark', isDark ? 'dark' : 'light');
-  const icon = document.getElementById('dark-icon');
-  if (icon) icon.className = isDark
-    ? 'fa-solid fa-sun text-sm'
-    : 'fa-solid fa-moon text-sm';
-});
+// The theme is applied before paint by theme-init.js and toggled from the BLT top bar.
 
 /* ------------------------------------------------------------------ */
 /*  UTILITY HELPERS                                                     */
@@ -948,7 +930,7 @@ function renderRepos(repos) {
     table.classList.remove('hidden');
     const sidebar = document.getElementById('main-sidebar');
     const layout = document.getElementById('main-layout');
-    const header = document.querySelector('header');
+    const header = document.getElementById('site-toolbar');
     if (sidebar) sidebar.classList.add('force-hidden');
     if (layout) layout.classList.add('table-view');
     if (header) header.classList.add('table-view-header');
@@ -961,7 +943,7 @@ function renderRepos(repos) {
     table.classList.remove('hidden');
     const sidebar = document.getElementById('main-sidebar');
     const layout = document.getElementById('main-layout');
-    const header = document.querySelector('header');
+    const header = document.getElementById('site-toolbar');
     if (sidebar) sidebar.classList.add('force-hidden');
     if (layout) layout.classList.add('table-view');
     if (header) header.classList.add('table-view-header');
@@ -971,7 +953,7 @@ function renderRepos(repos) {
     grid.classList.remove('hidden');
     const sidebar = document.getElementById('main-sidebar');
     const layout = document.getElementById('main-layout');
-    const header = document.querySelector('header');
+    const header = document.getElementById('site-toolbar');
     if (sidebar) sidebar.classList.remove('force-hidden');
     if (layout) layout.classList.remove('table-view');
     if (header) header.classList.remove('table-view-header');
