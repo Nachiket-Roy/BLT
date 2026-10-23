@@ -4,7 +4,7 @@ number: 10
 title: Fix day-of-week range parsing to allow values ending in 7
 base: main
 head: navodit:blt-cron/fix-day-of-week-range
-status: open
+status: deleted
 ts: 1792738561
 author: FTSqIIVcAz6yrEUfHk8wm1rr_FLa2bBVWJKeRKZCwcQ
 authorName: navodit
