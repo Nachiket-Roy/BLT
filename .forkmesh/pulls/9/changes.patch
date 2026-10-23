@@ -13,10 +13,10 @@ index ed42d5334c..e373d4ad34 100644
  # SENTRY_DSN=your_sentry_dsn_here
  # ANALYTICS_TOKEN=your_analytics_token_here
 diff --git a/blt-toasty/DEPLOYMENT.md b/blt-toasty/DEPLOYMENT.md
-index fd11682c58..41037bf330 100644
+index fd11682c58..1672846e07 100644
 --- a/blt-toasty/DEPLOYMENT.md
 +++ b/blt-toasty/DEPLOYMENT.md
-@@ -90,6 +90,10 @@ npx wrangler secret put GITLAB_WEBHOOK_SECRET --env production
+@@ -90,8 +90,19 @@ npx wrangler secret put GITLAB_WEBHOOK_SECRET --env production
  
  # RS256 public key (SPKI PEM) required for JWT verification
  npx wrangler secret put MCP_PUBLIC_KEY --env production
@@ -26,7 +26,16 @@ index fd11682c58..41037bf330 100644
 +npx wrangler secret put SLACK_WEBHOOK_URL --env production
  ```
  
++*Slack notifications:* point the webhook at a **private** channel. Messages
++name the issue and its CWE before a maintainer has looked at it. Notifications
++are sent when duplicate detection finishes or an event is quarantined, and
++nothing runs the triage stages in order yet: they start once
++[#34](https://git.owaspblt.org/BLT/issues/34) (Cloudflare Queues) lands, so an
++empty channel until then is expected.
++
  For CI/CD pipelines, ensure the following repository secrets are configured:
+ *   `CLOUDFLARE_API_TOKEN`
+ *   `CLOUDFLARE_ACCOUNT_ID`
 diff --git a/blt-toasty/src/duplicate_detector.py b/blt-toasty/src/duplicate_detector.py
 index e6c685a5b3..12bd06d212 100644
 --- a/blt-toasty/src/duplicate_detector.py
@@ -62,6 +71,45 @@ index e6c685a5b3..12bd06d212 100644
      return DuplicateDetectionResult(
          event_id=event_id,
          candidates=confirmed,
+diff --git a/blt-toasty/src/forge_links.py b/blt-toasty/src/forge_links.py
+new file mode 100644
+index 0000000000..03adbd2d28
+--- /dev/null
++++ b/blt-toasty/src/forge_links.py
+@@ -0,0 +1,12 @@
++"""Links to BLT forge pages, shared so every module builds them the same way."""
++
++from __future__ import annotations
++
++from typing import Any
++
++ISSUE_URL_TEMPLATE = "https://git.owaspblt.org/BLT/issues/{iid}"
++
++
++def issue_url(issue_iid: Any) -> str:
++    """Return the forge URL for issue number *issue_iid*."""
++    return ISSUE_URL_TEMPLATE.format(iid=issue_iid)
+diff --git a/blt-toasty/src/mcp_export.py b/blt-toasty/src/mcp_export.py
+index cfe411443f..0a2a7cc252 100644
+--- a/blt-toasty/src/mcp_export.py
++++ b/blt-toasty/src/mcp_export.py
+@@ -13,6 +13,7 @@ from js import Date
+ 
+ from auth import verify_agent_jwt
+ from errors import AuditIncompleteError, JWTExpiredError, JWTInvalidError
++from forge_links import issue_url
+ from rationale_builder import audit_completeness_check
+ from js import Response, Headers
+ 
+@@ -111,7 +112,7 @@ async def get_triage_record(event_id: str, db: Any) -> dict:
+ 
+     # Construct the JSON export contract (Version 1.0)
+     issue_iid_str = str(issue_iid) if issue_iid else "unknown"
+-    source_ref = f"https://git.owaspblt.org/BLT/issues{issue_iid_str}"
++    source_ref = issue_url(issue_iid_str)
+ 
+     cwe_hints = []
+     if rationale_row:
 diff --git a/blt-toasty/src/redaction_engine.py b/blt-toasty/src/redaction_engine.py
 index f8dcd48f12..41b312136a 100644
 --- a/blt-toasty/src/redaction_engine.py
@@ -124,10 +172,10 @@ index f8dcd48f12..41b312136a 100644
  async def _transition_state(db: Any, event_id: str, new_status: str) -> None:
 diff --git a/blt-toasty/src/slack_notifier.py b/blt-toasty/src/slack_notifier.py
 new file mode 100644
-index 0000000000..92afbe110c
+index 0000000000..9420693b31
 --- /dev/null
 +++ b/blt-toasty/src/slack_notifier.py
-@@ -0,0 +1,243 @@
+@@ -0,0 +1,238 @@
 +"""
 +Slack notifications for finished Toasty triage.
 +
@@ -143,6 +191,9 @@ index 0000000000..92afbe110c
 +* Uses the Workers ``fetch`` (``from js import fetch``) and reads the webhook
 +  URL from the ``SLACK_WEBHOOK_URL`` secret on ``env``.  Under CPython
 +  (pytest) ``fetch`` is ``None`` and tests inject a mock via ``env._fetch``.
++* The timeout is ``AbortSignal.timeout``, which runs entirely in JS.  A Python
++  ``setTimeout`` callback would be a borrowed proxy that Pyodide destroys
++  when ``setTimeout`` returns, so the abort would never fire.
 +* Notifications are best effort: a missing webhook URL skips silently, and
 +  any delivery error is logged and swallowed so triage never fails because
 +  Slack is down.
@@ -154,18 +205,17 @@ index 0000000000..92afbe110c
 +import logging
 +from typing import Any
 +
++from forge_links import issue_url
 +from rationale_builder import CWE_LABELS
 +
 +logger = logging.getLogger("toasty.slack_notifier")
 +
 +try:
-+    from js import AbortController, fetch  # type: ignore[import-not-found]
++    from js import fetch  # type: ignore[import-not-found]
 +except ImportError:
 +    fetch = None  # type: ignore[assignment]
-+    AbortController = None  # type: ignore[assignment, misc]
 +
 +SLACK_TIMEOUT_SECONDS = 5
-+ISSUE_URL_TEMPLATE = "https://git.owaspblt.org/BLT/issues/{iid}"
 +MAX_DUPLICATES_SHOWN = 3
 +
 +# Severity tier per CWE, roughly following the impact the weakness usually
@@ -258,7 +308,7 @@ index 0000000000..92afbe110c
 +    """
 +    duplicates = duplicates or []
 +    severity = severity_for_cwes(cwe_ids)
-+    issue_ref = f"<{ISSUE_URL_TEMPLATE.format(iid=issue_iid)}|#{issue_iid}>" if issue_iid else "unknown issue"
++    issue_ref = f"<{issue_url(issue_iid)}|#{issue_iid}>" if issue_iid else "unknown issue"
 +    headline = "Toasty quarantined an issue" if quarantined else "Toasty triaged an issue"
 +
 +    cwe_text = ", ".join(f"{c} ({CWE_LABELS.get(c, 'Unknown')})" for c in cwe_ids) or "none"
@@ -326,27 +376,20 @@ index 0000000000..92afbe110c
 +        "headers": {"Content-Type": "application/json"},
 +        "body": json.dumps(payload),
 +    }
-+    timer_id = None
 +    try:
-+        from js import Object, clearTimeout, setTimeout  # type: ignore[import-not-found]
++        from js import AbortSignal, Object  # type: ignore[import-not-found]
 +        from pyodide.ffi import to_js  # type: ignore[import-not-found]
 +
-+        controller = AbortController.new()
-+        options["signal"] = controller.signal
-+        timer_id = setTimeout(lambda: controller.abort(), SLACK_TIMEOUT_SECONDS * 1000)
++        options["signal"] = AbortSignal.timeout(SLACK_TIMEOUT_SECONDS * 1000)
 +        options = to_js(options, dict_converter=Object.fromEntries)
 +    except ImportError:
 +        pass  # CPython tests — the mock fetch takes the plain dict.
 +
-+    try:
-+        response = await _fetch(webhook_url, options)
-+        ok = 200 <= int(response.status) < 300
-+        if not ok:
-+            logger.warning("Slack webhook returned HTTP %s", response.status)
-+        return ok
-+    finally:
-+        if timer_id is not None:
-+            clearTimeout(timer_id)
++    response = await _fetch(webhook_url, options)
++    ok = 200 <= int(response.status) < 300
++    if not ok:
++        logger.warning("Slack webhook returned HTTP %s", response.status)
++    return ok
 +
 +
 +async def notify_triage(
@@ -395,10 +438,10 @@ index 2b9a1593fc..e99646e3e2 100644
 +        await notify_triage(env, db, event_id, quarantined=True)
 diff --git a/blt-toasty/tests/test_slack_notifier.py b/blt-toasty/tests/test_slack_notifier.py
 new file mode 100644
-index 0000000000..6571c1e03f
+index 0000000000..5e8fd3ff35
 --- /dev/null
 +++ b/blt-toasty/tests/test_slack_notifier.py
-@@ -0,0 +1,314 @@
+@@ -0,0 +1,350 @@
 +"""Tests for the Slack triage notifier.
 +
 +Covers:
@@ -415,6 +458,7 @@ index 0000000000..6571c1e03f
 +
 +import json
 +import sys
++import types
 +from unittest.mock import AsyncMock, MagicMock, patch
 +
 +import pytest
@@ -612,6 +656,41 @@ index 0000000000..6571c1e03f
 +
 +        assert await notify_triage(env, db, "evt-1") is True
 +        assert "*CWE*\\nnone" in json.dumps(_sent_payload(env))
++
++
++class TestWorkersRuntime:
++    @pytest.mark.asyncio
++    async def test_timeout_uses_abort_signal_not_python_timer(self):
++        """Under Pyodide the timeout must be AbortSignal.timeout, not a Python setTimeout callback."""
++        from src.slack_notifier import SLACK_TIMEOUT_SECONDS, post_to_slack
++
++        timeout_signal = object()
++        js = types.ModuleType("js")
++        js.AbortSignal = MagicMock()
++        js.AbortSignal.timeout = MagicMock(return_value=timeout_signal)
++        js.Object = MagicMock()
++        js.setTimeout = MagicMock(side_effect=AssertionError("setTimeout must not be used"))
++        ffi = types.ModuleType("pyodide.ffi")
++        ffi.to_js = MagicMock(side_effect=lambda obj, dict_converter=None: obj)
++        pyodide = types.ModuleType("pyodide")
++        pyodide.ffi = ffi
++
++        env = _Env()
++        with patch.dict(sys.modules, {"js": js, "pyodide": pyodide, "pyodide.ffi": ffi}):
++            assert await post_to_slack(WEBHOOK, {"text": "hi"}, env) is True
++
++        js.AbortSignal.timeout.assert_called_once_with(SLACK_TIMEOUT_SECONDS * 1000)
++        js.setTimeout.assert_not_called()
++        ffi.to_js.assert_called_once()
++        options = env._fetch.await_args.args[1]
++        assert options["signal"] is timeout_signal
++
++
++def test_issue_url_is_shared():
++    from src.forge_links import issue_url
++
++    assert issue_url(35) == "https://git.owaspblt.org/BLT/issues/35"
++    assert issue_url(35) in json.dumps(build_payload("evt-1", 35, [], quarantined=False))
 +
 +
 +# ---------------------------------------------------------------------------
