@@ -1,0 +1,783 @@
+diff --git a/blt-toasty/README.md b/blt-toasty/README.md
+index 0f41461b9b..171827cb91 100644
+--- a/blt-toasty/README.md
++++ b/blt-toasty/README.md
+@@ -15,7 +15,7 @@ Toasty operates entirely on Cloudflare's Edge, ensuring high performance, global
+ - **Vector Store**: Cloudflare Vectorize (384-dimensional embeddings, cosine similarity)
+ - **Embeddings**: FastEmbed (`BAAI/bge-small-en-v1.5`)
+ - **LLM Engine**: Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct`) with OpenAI (`gpt-4o-mini`) fallback; proposed Quality Gate provider routing uses LiteLLM
+-- **Integration**: inbound GitLab webhooks (`POST /webhook/gitlab`, for any external GitLab project; BLT's own issues are on [git.owaspblt.org](https://git.owaspblt.org/BLT/issues)), Slack API, and GitHub Actions/Check Runs for mirror-specific quality automation
++- **Integration**: inbound GitLab webhooks (`POST /webhook/gitlab`, for any external GitLab project; BLT's own issues are on [git.owaspblt.org](https://git.owaspblt.org/BLT/issues)), BLT Chat webhooks, and GitHub Actions/Check Runs for mirror-specific quality automation
+ 
+ ## Design Philosophy: Zero-Trust & Fail-Closed Redaction 🔒
+ The most critical invariant of the BLT-Toasty architecture is **Fail-Closed Redaction**.
+@@ -104,7 +104,7 @@ The project is executed in a rigorous 12-week timeline, divided into three major
+ *Goal: Implement AI summarization, semantic search, and human-readable audit trails.*
+ - **Week 3:** Summarizer v1 with token-budgeted prompts, CWE classification, and Cloudflare Workers AI / OpenAI routing.
+ - **Week 4:** FastEmbed integration, Cloudflare Vectorize integration, and `top_k=20` retrieval pipeline.
+-- **Week 5:** Duplicate linker with LLM adjudication, GitLab commenting, and Slack pilot notifications.
++- **Week 5:** Duplicate linker with LLM adjudication, GitLab commenting, and BLT Chat pilot notifications.
+ - **Week 6:** Label Rationale API, CWE reasoning fields, and the Audit Completeness Gate.
+ - **Week 7:** Durable Objects conversation state, 5-turn rolling buffer, and D1 multi-turn archival.
+ 
+@@ -173,4 +173,16 @@ We enforce the OWASP BLT ecosystem quality standards:
+    npx wrangler dev
+    ```
+ 
++### Optional BLT Chat triage notifications
++
++To receive terminal-state triage and safety-quarantine alerts, create an Incoming Webhook in BLT Chat and configure it as a Cloudflare secret.
++The webhook URL is sensitive and must not be committed to source control.
++
++```bash
++npx wrangler secret put BLT_CHAT_WEBHOOK_URL --env staging
++npx wrangler secret put BLT_CHAT_WEBHOOK_URL --env production
++```
++
++When the secret is unset, Toasty continues without sending BLT Chat notifications.
++
+ For full details, please refer to the `CONTRIBUTING.md` and the documentation in the `docs/` folder.
+diff --git a/blt-toasty/scripts/diagnose_blt_chat_webhook.py b/blt-toasty/scripts/diagnose_blt_chat_webhook.py
+new file mode 100644
+index 0000000000..40b4d23328
+--- /dev/null
++++ b/blt-toasty/scripts/diagnose_blt_chat_webhook.py
+@@ -0,0 +1,83 @@
++"""Compare curl and urllib delivery to a BLT Chat webhook.
++
++The webhook URL is read from BLT_CHAT_WEBHOOK_URL and is never printed.
++"""
++
++from __future__ import annotations
++
++import json
++import os
++import subprocess
++import urllib.error
++import urllib.request
++
++
++PAYLOAD = json.dumps({"text": "Toasty webhook transport diagnostic"})
++
++
++def curl_result(webhook_url: str, user_agent: str | None = None) -> tuple[str, str]:
++    command = [
++        "curl",
++        "--silent",
++        "--show-error",
++        "--output",
++        "/private/tmp/toasty-chat-curl-body.txt",
++        "--write-out",
++        "%{http_code}",
++        "--request",
++        "POST",
++        webhook_url,
++        "--header",
++        "Content-Type: application/json",
++        "--data",
++        PAYLOAD,
++    ]
++    if user_agent:
++        command.extend(["--user-agent", user_agent])
++    result = subprocess.run(command, check=False, capture_output=True, text=True)  # nosec B603
++    try:
++        with open("/private/tmp/toasty-chat-curl-body.txt", encoding="utf-8") as body_file:
++            body = body_file.read()
++    except FileNotFoundError:
++        body = result.stderr
++    return result.stdout.strip() or f"curl-exit-{result.returncode}", body.strip()
++
++
++def urllib_result(webhook_url: str, user_agent: str | None = None) -> tuple[str, str]:
++    headers = {"Content-Type": "application/json"}
++    if user_agent:
++        headers["User-Agent"] = user_agent
++    request = urllib.request.Request(
++        webhook_url,
++        data=PAYLOAD.encode("utf-8"),
++        headers=headers,
++        method="POST",
++    )
++    try:
++        with urllib.request.urlopen(request, timeout=15) as response:  # nosec B310
++            return str(response.status), response.read().decode("utf-8", errors="replace")
++    except urllib.error.HTTPError as error:
++        return str(error.code), error.read().decode("utf-8", errors="replace")
++    except urllib.error.URLError as error:
++        return "connection-error", str(error.reason)
++
++
++def main() -> None:
++    webhook_url = os.environ.get("BLT_CHAT_WEBHOOK_URL")
++    if not webhook_url:
++        raise SystemExit("BLT_CHAT_WEBHOOK_URL is not set in this terminal.")
++
++    checks = [
++        ("curl default", lambda: curl_result(webhook_url)),
++        ("curl Python UA", lambda: curl_result(webhook_url, "Python-urllib/3.14")),
++        ("urllib default", lambda: urllib_result(webhook_url)),
++        ("urllib custom UA", lambda: urllib_result(webhook_url, "Toasty-Notifier-Proof/1.0")),
++    ]
++    for label, check in checks:
++        status, body = check()
++        print(f"{label}: HTTP {status}")
++        print(f"  body: {body[:300]}")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/blt-toasty/scripts/test_blt_chat_notifier.py b/blt-toasty/scripts/test_blt_chat_notifier.py
+new file mode 100644
+index 0000000000..57d85a47a4
+--- /dev/null
++++ b/blt-toasty/scripts/test_blt_chat_notifier.py
+@@ -0,0 +1,77 @@
++"""Post safe Toasty notification examples to a BLT Chat test channel.
++
++Usage:
++    BLT_CHAT_WEBHOOK_URL='https://...' python scripts/test_blt_chat_notifier.py
++
++The webhook URL is intentionally read only from the environment so it cannot
++be accidentally committed with this proof helper.
++"""
++
++from __future__ import annotations
++
++import json
++import os
++import subprocess
++import sys
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
++
++from notifier import format_quarantine_notification, format_triage_notification
++
++
++def post(webhook_url: str, payload: dict) -> None:
++    # Curl is used because it is the transport manually verified against BLT
++    # Chat. The earlier urllib 403 is diagnosed separately; production delivery
++    # remains Workers-native fetch() in src/notifier.py.
++    result = subprocess.run(  # nosec B603 - fixed executable and argument list
++        [
++            "curl",
++            "--fail-with-body",
++            "--silent",
++            "--show-error",
++            "--request",
++            "POST",
++            webhook_url,
++            "--header",
++            "Content-Type: application/json",
++            "--data",
++            json.dumps(payload),
++        ],
++        check=False,
++        capture_output=True,
++        text=True,
++    )
++    if result.returncode:
++        raise RuntimeError(result.stderr.strip() or "curl could not deliver the notification")
++
++
++def main() -> None:
++    webhook_url = os.environ.get("BLT_CHAT_WEBHOOK_URL")
++    if not webhook_url:
++        raise SystemExit("Set BLT_CHAT_WEBHOOK_URL before running this script.")
++
++    event = {"id": "proof-triage-001", "project_id": "toasty-demo", "issue_iid": 42}
++    post(
++        webhook_url,
++        format_triage_notification(
++            event,
++            ["CWE-79", "CWE-89"],
++            {"candidate_event_id": "existing-issue-17", "similarity_score": 0.91},
++        ),
++    )
++    post(
++        webhook_url,
++        format_quarantine_notification(
++            {"id": "proof-quarantine-002", "project_id": "toasty-demo", "issue_iid": 43},
++            "Residual PII after Markdown stripping: 1 entities",
++        ),
++    )
++    print("Sent triage and quarantine proof notifications to BLT Chat.")
++
++
++if __name__ == "__main__":
++    try:
++        main()
++    except RuntimeError as error:
++        raise SystemExit(f"Could not deliver BLT Chat proof notifications: {error}") from error
+diff --git a/blt-toasty/src/notifier.py b/blt-toasty/src/notifier.py
+new file mode 100644
+index 0000000000..9a9f3ed249
+--- /dev/null
++++ b/blt-toasty/src/notifier.py
+@@ -0,0 +1,175 @@
++"""BLT Chat notifications for terminal Toasty triage states.
++
++The module deliberately contains no raw issue text.  Notifications are built
++only from the persisted event identifiers, CWE hints, and confirmed duplicate
++metadata so a chat delivery cannot expose an unredacted report.
++"""
++
++from __future__ import annotations
++
++import json
++import logging
++from typing import Any
++
++logger = logging.getLogger("toasty.notifier")
++
++try:
++    from js import AbortSignal, fetch  # type: ignore[import-not-found]
++except ImportError:
++    AbortSignal = None  # type: ignore[assignment]
++    fetch = None  # type: ignore[assignment]
++
++
++NOTIFICATION_TIMEOUT_MS = 5_000
++
++
++def _get_value(row: Any, key: str, default: Any = None) -> Any:
++    """Read a field from D1's dict-like rows without leaking runtime details."""
++    if row is None:
++        return default
++    if hasattr(row, "to_py"):
++        row = row.to_py()
++    if hasattr(row, "get"):
++        return row.get(key, default)
++    return getattr(row, key, default)
++
++
++def _escape_markdown(value: Any) -> str:
++    """Escape untrusted values before putting them in BLT Chat Markdown text."""
++    return (
++        str(value if value is not None else "unknown")
++        .replace("&", "&amp;")
++        .replace("<", "&lt;")
++        .replace(">", "&gt;")
++    )
++
++
++def format_triage_notification(event: dict[str, Any], cwe_hints: list[str], duplicate: dict[str, Any] | None) -> dict:
++    """Build the pure, privacy-safe BLT Chat webhook payload for an exported event."""
++    cwe_text = ", ".join(_escape_markdown(cwe) for cwe in cwe_hints) if cwe_hints else "unknown"
++    duplicate_text = "none"
++    if duplicate:
++        candidate_id = _escape_markdown(duplicate.get("candidate_event_id"))
++        score = duplicate.get("similarity_score")
++        try:
++            duplicate_text = f"confirmed `{candidate_id}` ({float(score):.2f})"
++        except (TypeError, ValueError):
++            duplicate_text = f"confirmed `{candidate_id}`"
++
++    text = "\n".join(
++        [
++            "#### Toasty triage completed",
++            f"**Event:** `{_escape_markdown(event.get('id'))}`",
++            f"**Project / issue:** {_escape_markdown(event.get('project_id'))} / !{_escape_markdown(event.get('issue_iid'))}",
++            f"**CWE:** {cwe_text}",
++            "**Severity:** unknown (not assessed)",
++            f"**Duplicate finding:** {duplicate_text}",
++        ]
++    )
++    return {"text": text}
++
++
++def _safe_quarantine_reason(reason: str) -> str:
++    """Classify stored reasons without copying exception or report text to chat."""
++    normalized = reason.lower()
++    if "residual pii" in normalized:
++        return "Residual PII detected"
++    if "confidence" in normalized and "entity" in normalized:
++        return "PII confidence below threshold"
++    return "Safety check failed — inspect protected audit log"
++
++
++def format_quarantine_notification(event: dict[str, Any], reason: str) -> dict:
++    """Build the deliberately thin BLT Chat webhook payload for quarantine."""
++    safe_reason = _safe_quarantine_reason(reason)
++    text = "\n".join(
++        [
++            "#### Toasty safety quarantine",
++            f"**Event:** `{_escape_markdown(event.get('id'))}`",
++            f"**Project / issue:** {_escape_markdown(event.get('project_id'))} / !{_escape_markdown(event.get('issue_iid'))}",
++            "**PII / safety quarantine:** yes",
++            f"**Reason:** {safe_reason}",
++        ]
++    )
++    return {"text": text}
++
++
++def _parse_cwe_hints(value: Any) -> list[str]:
++    """Return valid, display-safe CWE strings from the JSON D1 column."""
++    if isinstance(value, str):
++        try:
++            value = json.loads(value)
++        except json.JSONDecodeError:
++            return []
++    if not isinstance(value, list):
++        return []
++    return [str(cwe) for cwe in value if isinstance(cwe, str) and cwe.startswith("CWE-")]
++
++
++async def deliver_chat_notification(payload: dict, env: Any, event_id: str) -> bool:
++    """Deliver a payload without allowing BLT Chat failures to affect triage."""
++    webhook_url = getattr(env, "BLT_CHAT_WEBHOOK_URL", None) if env is not None else None
++    if not isinstance(webhook_url, str) or not webhook_url.strip():
++        return False
++
++    fetch_impl = fetch or getattr(env, "_fetch_impl", None)
++    if fetch_impl is None:
++        logger.warning("BLT Chat notification unavailable for event %s: fetch is not configured", event_id)
++        return False
++
++    try:
++        options = {
++            "method": "POST",
++            "headers": {"Content-Type": "application/json"},
++            "body": json.dumps(payload),
++        }
++        # Use the browser-native timeout rather than passing a Python callback
++        # into JavaScript's setTimeout. Pyodide can release that callback before
++        # it fires, leaving a hung fetch without a cancellation path.
++        if AbortSignal is not None:
++            options["signal"] = AbortSignal.timeout(NOTIFICATION_TIMEOUT_MS)
++        response = await fetch_impl(
++            webhook_url,
++            options,
++        )
++        if not getattr(response, "ok", False):
++            logger.warning(
++                "BLT Chat notification failed for event %s with HTTP %s",
++                event_id,
++                getattr(response, "status", "unknown"),
++            )
++            return False
++    except Exception:
++        logger.exception("BLT Chat notification delivery raised for event %s", event_id)
++        return False
++
++    return True
++
++
++async def notify_triage_exported(db: Any, event: dict[str, Any], env: Any) -> bool:
++    """Load minimal exported-event context and send its notification."""
++    event_id = event["id"]
++    summary_row = (
++        await db.prepare("SELECT cwe_hints FROM triage_summaries WHERE triage_event_id = ?").bind(event_id).first()
++    )
++    duplicate_row = (
++        await db.prepare(
++            "SELECT candidate_event_id, similarity_score FROM duplicate_candidates "
++            "WHERE triage_event_id = ? AND llm_confirmed = 1 ORDER BY similarity_score DESC LIMIT 1"
++        )
++        .bind(event_id)
++        .first()
++    )
++    cwe_hints = _parse_cwe_hints(_get_value(summary_row, "cwe_hints"))
++    duplicate = None
++    if duplicate_row is not None:
++        duplicate = {
++            "candidate_event_id": _get_value(duplicate_row, "candidate_event_id"),
++            "similarity_score": _get_value(duplicate_row, "similarity_score"),
++        }
++    return await deliver_chat_notification(format_triage_notification(event, cwe_hints, duplicate), env, event_id)
++
++
++async def notify_quarantined(event: dict[str, Any], reason: str, env: Any) -> bool:
++    """Send a safe terminal-state notification for a quarantined event."""
++    return await deliver_chat_notification(format_quarantine_notification(event, reason), env, event["id"])
+diff --git a/blt-toasty/src/redaction_engine.py b/blt-toasty/src/redaction_engine.py
+index f8dcd48f12..6a9e4a9d0f 100644
+--- a/blt-toasty/src/redaction_engine.py
++++ b/blt-toasty/src/redaction_engine.py
+@@ -65,7 +65,7 @@ class RedactionResult:
+             by a typed placeholder such as ``[EMAIL_ADDRESS]``.
+         safe_preview_text: A more aggressive version where every typed
+             placeholder is further replaced by the uniform ``[REDACTED]``
+-            tag — suitable for Slack, CLI, or public dashboards.
++            tag — suitable for chat, CLI, or public dashboards.
+         redaction_map: An ordered list of match records for the D1 audit
+             table.  Each entry carries ``entity_type``, ``start``, ``end``,
+             ``confidence``, and ``detector``.
+@@ -135,7 +135,7 @@ async def redact(text: str, env: Any, event_id: str, db: Any) -> RedactionResult
+                 types = ", ".join(sorted({m["entity_type"] for m in residual}))
+                 reason = f"Residual PII after Markdown stripping: {len(residual)} entities ({types})"
+                 logger.warning("Quarantining event %s: %s", event_id, reason)
+-                await _quarantine_event(db, event_id, reason)
++                await _quarantine_event(db, event_id, reason, env)
+                 raise RedactionFailedError(
+                     f"Residual PII found for event {event_id}",
+                     event_id=event_id,
+@@ -149,7 +149,7 @@ async def redact(text: str, env: Any, event_id: str, db: Any) -> RedactionResult
+                     f"Entity {match['entity_type']} at [{match['start']}:{match['end']}] "
+                     f"has confidence {match['confidence']:.2f} < threshold {_CONFIDENCE_THRESHOLD}"
+                 )
+-                await _quarantine_event(db, event_id, reason)
++                await _quarantine_event(db, event_id, reason, env)
+                 raise RedactionFailedError(
+                     f"Confidence below threshold for event {event_id}: {reason}",
+                     event_id=event_id,
+@@ -179,8 +179,7 @@ async def redact(text: str, env: Any, event_id: str, db: Any) -> RedactionResult
+         # Catch-all safety net — quarantine and fail closed.
+         reason = f"Unexpected error during redaction: {type(exc).__name__}: {exc}"
+         logger.error("Fail-closed redaction triggered for event %s: %s", event_id, reason)
+-        await _quarantine_event(db, event_id, reason)
+-        await _transition_state(db, event_id, "redaction_failed")
++        await _quarantine_event(db, event_id, reason, env)
+         raise RedactionFailedError(
+             f"Redaction failed for event {event_id}",
+             event_id=event_id,
+@@ -288,13 +287,13 @@ async def _store_redaction_audit(db: Any, event_id: str, redaction_map: list[dic
+         await db.batch(queries)
+ 
+ 
+-async def _quarantine_event(db: Any, event_id: str, reason: str) -> None:
++async def _quarantine_event(db: Any, event_id: str, reason: str, env: Any) -> None:
+     """Mark an event as quarantined in D1."""
+     from state_machine import quarantine_event
+ 
+-    # redaction happens before vectorization, so there is no vector to delete
+-    # we pass env=None which safely skips vector deletion while preserving the audit trail
+-    await quarantine_event(db, event_id, reason, env=None, has_vector=False)
++    # Redaction happens before vectorization, so no vector needs deletion.  The
++    # real environment is still required for optional terminal-state alerts.
++    await quarantine_event(db, event_id, reason, env=env, has_vector=False)
+ 
+ 
+ async def _transition_state(db: Any, event_id: str, new_status: str) -> None:
+diff --git a/blt-toasty/src/state_machine.py b/blt-toasty/src/state_machine.py
+index 2b9a1593fc..2e26a3cf87 100644
+--- a/blt-toasty/src/state_machine.py
++++ b/blt-toasty/src/state_machine.py
+@@ -9,6 +9,7 @@ import logging
+ import secrets
+ 
+ from errors import StateTransitionError
++from notifier import notify_quarantined, notify_triage_exported
+ 
+ logger = logging.getLogger("toasty.state_machine")
+ 
+@@ -110,6 +111,14 @@ async def transition_state(db, event_id: str, to_status: str, env=None) -> None:
+             except Exception as exc:
+                 logger.error(f"Failed to emit telemetry: {exc}")
+ 
++    if to_status == "exported":
++        try:
++            await notify_triage_exported(db, event, env)
++        except Exception:
++            # Notification context and delivery are observability concerns;
++            # a terminal D1 transition has already succeeded and must stand.
++            logger.exception("Failed to notify BLT Chat for exported event %s", event_id)
++
+ 
+ async def quarantine_event(db, event_id: str, reason: str, env=None, has_vector: bool = True) -> None:
+     """
+@@ -164,6 +173,13 @@ async def quarantine_event(db, event_id: str, reason: str, env=None, has_vector:
+     if changes == 0:
+         raise StateTransitionError("Concurrent modification detected")
+ 
++    try:
++        await notify_quarantined(event, reason, env)
++    except Exception:
++        # The quarantine/audit batch is already committed.  Never let a
++        # notification outage weaken the fail-closed security path.
++        logger.exception("Failed to notify BLT Chat for quarantined event %s", event_id)
++
+     # 3. Explicitly purge the vector payload if it has one
+     if has_vector:
+         if not env or not hasattr(env, "VECTORIZE"):
+diff --git a/blt-toasty/tests/test_notifier.py b/blt-toasty/tests/test_notifier.py
+new file mode 100644
+index 0000000000..616aaab169
+--- /dev/null
++++ b/blt-toasty/tests/test_notifier.py
+@@ -0,0 +1,167 @@
++"""Unit tests for the privacy-safe BLT Chat terminal-state notifier."""
++
++import json
++from types import SimpleNamespace
++from unittest.mock import AsyncMock
++
++import pytest
++
++from src.notifier import (
++    NOTIFICATION_TIMEOUT_MS,
++    deliver_chat_notification,
++    format_quarantine_notification,
++    format_triage_notification,
++    notify_triage_exported,
++)
++
++
++EVENT = {"id": "evt-123", "project_id": 42, "issue_iid": 99}
++
++
++def _all_text(payload: dict) -> str:
++    return json.dumps(payload)
++
++
++def test_triage_payload_includes_requested_fields_without_issue_content():
++    payload = format_triage_notification(
++        EVENT,
++        ["CWE-79", "CWE-89"],
++        {"candidate_event_id": "evt-existing", "similarity_score": 0.9123},
++    )
++
++    text = _all_text(payload)
++    assert payload["text"].startswith("#### Toasty triage completed")
++    assert set(payload) == {"text"}
++    assert "CWE-79, CWE-89" in text
++    assert "unknown (not assessed)" in text
++    assert "evt-existing" in text
++    assert "0.91" in text
++    assert "executive_summary" not in text
++    assert "raw_payload" not in text
++
++
++def test_triage_payload_reports_no_confirmed_duplicate():
++    payload = format_triage_notification(EVENT, [], None)
++
++    assert "**Duplicate finding:** none" in payload["text"]
++    assert "**CWE:** unknown" in payload["text"]
++
++
++@pytest.mark.parametrize(
++    ("reason", "expected"),
++    [
++        ("Residual PII after Markdown stripping: 1 entities (EMAIL_ADDRESS)", "Residual PII detected"),
++        ("Entity EMAIL_ADDRESS at [0:1] has confidence 0.20 < threshold 0.70", "PII confidence below threshold"),
++        ("Unexpected error during redaction: secret admin@example.com", "Safety check failed"),
++    ],
++)
++def test_quarantine_payload_sanitizes_stored_reason(reason, expected):
++    payload = format_quarantine_notification(EVENT, reason)
++    text = _all_text(payload)
++
++    assert "PII / safety quarantine" in text
++    assert expected in text
++    assert "admin@example.com" not in text
++    assert "secret " not in text
++
++
++@pytest.mark.asyncio
++async def test_delivery_is_noop_without_webhook_url():
++    fetch_mock = AsyncMock()
++    env = SimpleNamespace(_fetch_impl=fetch_mock)
++
++    delivered = await deliver_chat_notification({"text": "test"}, env, "evt-123")
++
++    assert delivered is False
++    fetch_mock.assert_not_awaited()
++
++
++@pytest.mark.asyncio
++async def test_delivery_posts_json_to_configured_webhook():
++    fetch_mock = AsyncMock(return_value=SimpleNamespace(ok=True, status=200))
++    env = SimpleNamespace(BLT_CHAT_WEBHOOK_URL="https://git.owaspblt.org/hooks/test", _fetch_impl=fetch_mock)
++    payload = {"text": "test"}
++
++    delivered = await deliver_chat_notification(payload, env, "evt-123")
++
++    assert delivered is True
++    fetch_mock.assert_awaited_once()
++    url, options = fetch_mock.await_args.args
++    assert url == env.BLT_CHAT_WEBHOOK_URL
++    assert options["method"] == "POST"
++    assert options["headers"] == {"Content-Type": "application/json"}
++    assert json.loads(options["body"]) == payload
++
++
++@pytest.mark.asyncio
++async def test_delivery_uses_native_worker_timeout(monkeypatch):
++    fetch_mock = AsyncMock(return_value=SimpleNamespace(ok=True, status=200))
++    signal = object()
++    abort_signal = SimpleNamespace(timeout=lambda timeout_ms: signal)
++    monkeypatch.setattr("src.notifier.AbortSignal", abort_signal)
++    env = SimpleNamespace(BLT_CHAT_WEBHOOK_URL="https://git.owaspblt.org/hooks/test", _fetch_impl=fetch_mock)
++
++    await deliver_chat_notification({"text": "test"}, env, "evt-123")
++
++    assert fetch_mock.await_args.args[1]["signal"] is signal
++    assert NOTIFICATION_TIMEOUT_MS == 5_000
++
++
++@pytest.mark.asyncio
++async def test_delivery_failure_is_contained():
++    fetch_mock = AsyncMock(return_value=SimpleNamespace(ok=False, status=503))
++    env = SimpleNamespace(BLT_CHAT_WEBHOOK_URL="https://git.owaspblt.org/hooks/test", _fetch_impl=fetch_mock)
++
++    delivered = await deliver_chat_notification({"text": "test"}, env, "evt-123")
++
++    assert delivered is False
++
++
++@pytest.mark.asyncio
++async def test_delivery_exception_is_contained():
++    fetch_mock = AsyncMock(side_effect=RuntimeError("network unavailable"))
++    env = SimpleNamespace(BLT_CHAT_WEBHOOK_URL="https://git.owaspblt.org/hooks/test", _fetch_impl=fetch_mock)
++
++    delivered = await deliver_chat_notification({"text": "test"}, env, "evt-123")
++
++    assert delivered is False
++
++
++class _Statement:
++    def __init__(self, result):
++        self.result = result
++        self.bound = None
++
++    def bind(self, *args):
++        self.bound = args
++        return self
++
++    async def first(self):
++        return self.result
++
++
++class _NotifierDb:
++    def __init__(self):
++        self.queries = []
++
++    def prepare(self, query):
++        self.queries.append(query)
++        if "triage_summaries" in query:
++            return _Statement({"cwe_hints": '["CWE-79"]'})
++        return _Statement({"candidate_event_id": "evt-existing", "similarity_score": 0.91})
++
++
++@pytest.mark.asyncio
++async def test_exported_notification_uses_summary_cwes_and_confirmed_duplicate_only():
++    fetch_mock = AsyncMock(return_value=SimpleNamespace(ok=True, status=200))
++    env = SimpleNamespace(BLT_CHAT_WEBHOOK_URL="https://git.owaspblt.org/hooks/test", _fetch_impl=fetch_mock)
++    db = _NotifierDb()
++
++    delivered = await notify_triage_exported(db, EVENT, env)
++
++    assert delivered is True
++    assert any("cwe_hints" in query for query in db.queries)
++    assert any("llm_confirmed = 1" in query for query in db.queries)
++    payload = json.loads(fetch_mock.await_args.args[1]["body"])
++    assert "CWE-79" in _all_text(payload)
++    assert "evt-existing" in _all_text(payload)
+diff --git a/blt-toasty/tests/test_redaction_engine.py b/blt-toasty/tests/test_redaction_engine.py
+index 7e504500d7..aaceb55563 100644
+--- a/blt-toasty/tests/test_redaction_engine.py
++++ b/blt-toasty/tests/test_redaction_engine.py
+@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock
+ 
+ import pytest
+ 
++import state_machine
+ from src.errors import RedactionFailedError, StateTransitionError
+ from src.markdown_preprocessor import extract_plain_text
+ from src.native_recognizers import apply_native_redaction
+@@ -390,6 +391,18 @@ class TestRedactionEngine:
+         # The event was quarantined after the audit write failed.
+         assert broken_db.batch.await_count == 2
+ 
++    @pytest.mark.asyncio
++    async def test_quarantine_passes_worker_environment_to_state_machine(self, mock_db, mock_env, monkeypatch):
++        """PII quarantine keeps env available for optional BLT Chat delivery."""
++        quarantine = AsyncMock()
++        monkeypatch.setattr(state_machine, "quarantine_event", quarantine)
++
++        from src.redaction_engine import _quarantine_event
++
++        await _quarantine_event(mock_db, "evt-env", "Residual PII after Markdown stripping", mock_env)
++
++        quarantine.assert_awaited_once_with(mock_db, "evt-env", "Residual PII after Markdown stripping", env=mock_env, has_vector=False)
++
+     @pytest.mark.asyncio
+     async def test_redaction_audit_uses_single_batch(self, mock_db, mock_env):
+         """All PII audit rows are written in one db.batch() call, not one INSERT each."""
+diff --git a/blt-toasty/tests/test_state_machine.py b/blt-toasty/tests/test_state_machine.py
+index 4da2a544eb..1f1337a80e 100644
+--- a/blt-toasty/tests/test_state_machine.py
++++ b/blt-toasty/tests/test_state_machine.py
+@@ -5,6 +5,7 @@ Tests for the D1 state machine using mocked Cloudflare Workers D1 environment.
+ import pytest
+ from unittest.mock import MagicMock, AsyncMock
+ 
++import src.state_machine as state_machine
+ from src.state_machine import transition_state, get_event, quarantine_event, VALID_TRANSITIONS
+ from src.errors import StateTransitionError
+ 
+@@ -192,3 +193,38 @@ async def test_quarantine_event_zero_changes():
+ 
+     # Ensure the audit log was NOT inserted because changes was 0
+     mock_stmt_run_audit.assert_not_called()
++
++
++@pytest.mark.asyncio
++async def test_exported_transition_notifies_after_successful_update(mock_db, monkeypatch):
++    notify = AsyncMock()
++    monkeypatch.setattr(state_machine, "notify_triage_exported", notify)
++    mock_db.next_event = {"id": "test_id", "status": "embedded"}
++
++    await transition_state(mock_db, "test_id", "exported")
++
++    notify.assert_awaited_once_with(mock_db, mock_db.next_event, None)
++
++
++@pytest.mark.asyncio
++async def test_quarantine_notifies_after_successful_batch(mock_db, monkeypatch):
++    notify = AsyncMock()
++    monkeypatch.setattr(state_machine, "notify_quarantined", notify)
++    mock_db.next_event = {"id": "test_id", "status": "pending"}
++
++    await quarantine_event(mock_db, "test_id", "test reason", has_vector=False)
++
++    notify.assert_awaited_once_with(mock_db.next_event, "test reason", None)
++
++
++@pytest.mark.asyncio
++async def test_failed_transition_does_not_notify(mock_db, monkeypatch):
++    notify = AsyncMock()
++    monkeypatch.setattr(state_machine, "notify_triage_exported", notify)
++    mock_db.next_event = {"id": "test_id", "status": "embedded"}
++    mock_db.next_changes = 0
++
++    with pytest.raises(StateTransitionError, match="Concurrent modification detected"):
++        await transition_state(mock_db, "test_id", "exported")
++
++    notify.assert_not_awaited()
+diff --git a/blt-toasty/wrangler.toml b/blt-toasty/wrangler.toml
+index fe4e77691e..fd5f2ec795 100644
+--- a/blt-toasty/wrangler.toml
++++ b/blt-toasty/wrangler.toml
+@@ -76,11 +76,16 @@ name = "toasty-backend-staging"
+ 
+ [env.staging.vars]
+ FASTEMBED_URL = "https://fastembed-staging.internal"
++ENVIRONMENT = "staging"
++LOG_LEVEL = "info"
++
++[env.staging.ai]
++binding = "AI"
+ 
+ [[env.staging.d1_databases]]
+ binding = "DB"
+ database_name = "toasty-db-staging"
+-database_id = "00000000-0000-0000-0000-000000000002"
++database_id = "1369881d-7dd0-4bbb-8a3d-c9df20cad1b3"
+ 
+ [[env.staging.durable_objects.bindings]]
+ name = "CONVERSATION_DO"
+@@ -127,11 +132,11 @@ dataset = "toasty_telemetry_dev"
+ 
+ [[migrations]]
+ tag = "v1"
+-new_classes = ["ConversationDO"]
++new_sqlite_classes = ["ConversationDO"]
+ 
+ [[migrations]]
+ tag = "v2"
+-new_classes = ["RateLimiterDO"]
++new_sqlite_classes = ["RateLimiterDO"]
+ 
+ [vars]
+ ENVIRONMENT = "development"
