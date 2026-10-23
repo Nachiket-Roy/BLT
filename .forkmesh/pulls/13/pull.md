@@ -4,7 +4,7 @@ number: 13
 title: blt-vanish: rename remaining SelfErase references to BLT Vanish
 base: main
 head: pr/vanshika2720/vanish-selferase-rename
-status: open
+status: merged
 ts: 1792786592
 author: Cu6HYOAI_KXF_0n4il24bXIniH5dBGJ0ELffhPIkLLQ
 authorName: vanshika2720
@@ -16,6 +16,9 @@ syncedHeadOid: fa480e8ce8b13de76cb7ff3de20dfce5607a11f0
 revision: 3
 creationBaseOid: adcea056cc55f7789374ed5c1dbead26c85725bd
 creationHeadOid: 511322f9a8a6aa88844b490293be4fd6c9989c33
+mergeBase: 09120547eee9ede7e2ab79ff1a80504c86c4e211
+mergeHead: fa480e8ce8b13de76cb7ff3de20dfce5607a11f0
+mergedAt: 1792793081098
 ---
 
 ## Summary
