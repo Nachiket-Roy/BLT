@@ -1,8 +1,8 @@
 diff --git a/blt-next/src/assets/js/main.js b/blt-next/src/assets/js/main.js
-index 401cf41ff0..4065e97fb9 100644
+index 3a6c5f2e56..42d0cec747 100644
 --- a/blt-next/src/assets/js/main.js
 +++ b/blt-next/src/assets/js/main.js
-@@ -601,10 +601,12 @@ if (document.readyState === 'loading') {
+@@ -609,10 +609,12 @@ if (document.readyState === 'loading') {
  
  const rowsPerPage = 5;
  let currentPage = 1;
@@ -16,7 +16,7 @@ index 401cf41ff0..4065e97fb9 100644
  
    const start = (currentPage - 1) * rowsPerPage;
    const end = start + rowsPerPage;
-@@ -620,9 +622,10 @@ function updateLeaderboardPagination() {
+@@ -628,9 +630,10 @@ function updateLeaderboardPagination() {
    const info = document.getElementById("pagination-info");
  
    if (info) {
@@ -30,7 +30,7 @@ index 401cf41ff0..4065e97fb9 100644
    }
  }
  
-@@ -659,7 +662,7 @@ document.addEventListener("DOMContentLoaded", () => {
+@@ -667,7 +670,7 @@ document.addEventListener("DOMContentLoaded", () => {
  });
  
  document.getElementById("next-page")?.addEventListener("click", () => {
@@ -40,10 +40,10 @@ index 401cf41ff0..4065e97fb9 100644
      currentPage++;
      updateLeaderboardPagination();
 diff --git a/blt-next/src/pages/leaderboard.html b/blt-next/src/pages/leaderboard.html
-index 72708b98cf..224c372d95 100644
+index b50eb89ea3..5c3654aefa 100644
 --- a/blt-next/src/pages/leaderboard.html
 +++ b/blt-next/src/pages/leaderboard.html
-@@ -169,7 +169,7 @@
+@@ -134,7 +134,7 @@
  
          <!-- Pagination -->
          <div class="flex items-center justify-between mt-6">
@@ -53,26 +53,19 @@ index 72708b98cf..224c372d95 100644
              <button id="prev-page" class="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-30 transition-colors">
                <i class="fa-solid fa-chevron-left text-xs" aria-hidden="true"></i>
 diff --git a/blt-next/workers/main.py b/blt-next/workers/main.py
-index 494df5e747..e1052bc099 100644
+index 71a8a4d98d..3d11c8e7d9 100644
 --- a/blt-next/workers/main.py
 +++ b/blt-next/workers/main.py
-@@ -1,4 +1,4 @@
--from js import Response, Headers, URL
-+from js import Response, Headers, URL, fetch
- import json
- import hashlib
- from html import escape as html_escape
-@@ -17,6 +17,9 @@ ALLOWED_ORIGINS = [
+@@ -17,6 +17,8 @@ ALLOWED_ORIGINS = [
      'http://localhost:8000',
  ]
  
-+DEFAULT_BLT_API_URL = 'https://api.owaspblt.org'
 +LEADERBOARD_PAGE_SIZE = 100
 +
  FRONTEND_SECURITY_HEADERS = {
      'X-Content-Type-Options': 'nosniff',
      'Strict-Transport-Security': 'max-age=31536000',
-@@ -116,14 +119,6 @@ STATS = {
+@@ -116,14 +118,6 @@ STATS = {
      'projects_protected': '892',
  }
  
@@ -87,7 +80,7 @@ index 494df5e747..e1052bc099 100644
  PROJECTS = [
      {
          'name': 'OWASP BLT',
-@@ -678,6 +673,20 @@ async def handle_bugs_list(request, env=None):
+@@ -679,6 +673,18 @@ async def handle_bugs_list(request, env=None):
      return await list_bug_reports(request, env)
  
  
@@ -96,11 +89,9 @@ index 494df5e747..e1052bc099 100644
 +
 +    Returns (entries, total). Raises on a network or non-2xx failure.
 +    """
-+    base = getattr(env, 'BLT_API_URL', None) or DEFAULT_BLT_API_URL
-+    api_response = await fetch(f"{base.rstrip('/')}/leaderboard?per_page={LEADERBOARD_PAGE_SIZE}")
-+    if not api_response.ok:
-+        raise RuntimeError(f"BLT-API returned {api_response.status}")
-+    payload = (await api_response.json()).to_py()
++    status, payload = await call_blt_api(env, 'GET', f'/leaderboard?per_page={LEADERBOARD_PAGE_SIZE}')
++    if status != 200 or not isinstance(payload, dict):
++        raise RuntimeError(f"BLT-API returned {status}")
 +    entries = payload.get('data') or []
 +    total = (payload.get('pagination') or {}).get('total', len(entries))
 +    return entries, total
@@ -108,7 +99,7 @@ index 494df5e747..e1052bc099 100644
  async def handle_leaderboard(request, env=None):
      """Handle /api/leaderboard endpoint.
  
-@@ -685,28 +694,52 @@ async def handle_leaderboard(request, env=None):
+@@ -686,28 +692,52 @@ async def handle_leaderboard(request, env=None):
      column header and table shell, and swaps this markup into #leaderboard-body
      via HTMX, so the rows must match its Tailwind grid layout
      (columns: rank / researcher / bugs / points / rewards).
