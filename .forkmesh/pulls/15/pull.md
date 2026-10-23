@@ -5,14 +5,17 @@ title: blt-mcp: sync AGENT.md with tool definitions
 base: main
 head: pr/vanshika2720/blt-mcp-sync-agent-md
 status: open
-ts: 1792752076
+ts: 1792786834
 author: Cu6HYOAI_KXF_0n4il24bXIniH5dBGJ0ELffhPIkLLQ
 authorName: vanshika2720
-sig: qLb57qbyPp4Ylbd4_ww4SIi2PchEEBbXLx3Rzg1vxW-RtnDISupUzPnX34eyZEJc9-69a_LFDIWrcS_PZPRlBw
+sig: mIE51DKmlPK4o0Wl9kOTDJGPByRKBRFoHkTUuqnwWLeHxOfaDx6Cb8LrdlNa4ds9OBgvuDVUDlbjG5i-jyJxBA
 aiModel: None
-headBaseOid: 1ba8c8d06c8c40b2fdd1479bd4685c635fc01b45
-headOid: 91c269d7654b7c12b3ab439fe96386fdb6450238
+headBaseOid: adcea056cc55f7789374ed5c1dbead26c85725bd
+headOid: 301d606d3329ebee4fb2da5b3056b30103e68e5f
 syncedHeadOid: 91c269d7654b7c12b3ab439fe96386fdb6450238
+revision: 2
+creationBaseOid: adcea056cc55f7789374ed5c1dbead26c85725bd
+creationHeadOid: 91c269d7654b7c12b3ab439fe96386fdb6450238
 ---
 
 ## Summary
