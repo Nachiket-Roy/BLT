@@ -1,5 +1,5 @@
 diff --git a/blt-mcp/AGENT.md b/blt-mcp/AGENT.md
-index 32d9911c0e..a0a089d1db 100644
+index 32d9911c0e..4cc55a3eaf 100644
 --- a/blt-mcp/AGENT.md
 +++ b/blt-mcp/AGENT.md
 @@ -8,12 +8,12 @@ This guide explains how to interact with the OWASP Bug Logging Tool (BLT) ecosys
@@ -93,21 +93,21 @@ index 32d9911c0e..a0a089d1db 100644
 +- **Returns**: The model's analysis text.
 +- **Requires**: `CF_ACCOUNT_ID` and `CF_API_TOKEN` in the server environment. The model can be overridden with `CF_VISION_MODEL`. Invalid paths and missing credentials raise errors.
 +
-+### Other write tools (v2 API)
++### Other tools (v2 API)
 +
-+These tools are also registered, and every one of them except `auth_signin` requires `confirmed=true`:
++These tools are also registered. Arguments marked `?` are optional. Every tool in the first list takes `confirmed` (default `false`) and requires `confirmed=true`; see [Confirmation](#confirmation-for-write-tools).
 +
-+- `auth_signup(email, password, username)`, `auth_signin(email, password)`
++- `auth_signup(email, password, username)`
 +- `create_bug(title, description, repo_id?, labels?, assignee?)`, `update_bug(id, title?, description?, status?)`
 +- `create_user(username, email, password, profile_info?)`
 +- `create_job(title, description, company, location?)`, `update_job(id, title?, description?, company?, location?)`, `record_job_view(id)`
 +- `create_hackathon(name, description, start_date?, end_date?)`, `update_hackathon(id, name?, description?)`, `register_hackathon_participant(id, user_id)`
 +
-+Arguments marked `?` are optional.
++`auth_signin(email, password)` does not take `confirmed`.
 +
 +### Confirmation for write tools
 +
-+Write tools take `confirmed` (boolean, default `false`). Called without `confirmed=true`, they do nothing and raise `Write operation requires confirmation. Please set 'confirmed': true to proceed.` Ask the user before retrying with `confirmed=true`. Write calls are tagged as AI-generated (`X-AI-Generated`, `X-AI-Source`, `X-AI-Timestamp` headers and a `metadata` field).
++Write tools take `confirmed` (boolean, default `false`). Called without `confirmed=true`, they do nothing and raise `Write operation requires confirmation. Please set 'confirmed': true to proceed.` Ask the user before retrying with `confirmed=true`. Write calls are tagged as AI-generated with `X-AI-Generated`, `X-AI-Source` and `X-AI-Timestamp` headers; every write tool except `submit_issue` also sends a `metadata` field in the request body.
  
  ---
  
@@ -131,3 +131,501 @@ index 32d9911c0e..a0a089d1db 100644
      If `BLT_API_KEY` is not explicitly set by the user, the MCP server automatically falls back to a **static public showcase API key**. In this mode, you have **read-only** access to sample data. If you attempt a write/mutation action (like updating a bug status or submitting a comment) and receive a `401 Unauthorized` response, politely ask the user to authenticate by running:
      ```bash
      uv run -m blt_mcp.cli auth login
+diff --git a/blt-mcp/blt_mcp/v2_tools.py b/blt-mcp/blt_mcp/v2_tools.py
+index 16e083473e..1f3648c75f 100644
+--- a/blt-mcp/blt_mcp/v2_tools.py
++++ b/blt-mcp/blt_mcp/v2_tools.py
+@@ -21,12 +21,20 @@ Safety / Confirmation Flow:
+ 
+ import logging
+ 
+-from blt_mcp.server_base import http_client, mcp
++from blt_mcp import server_base
++from blt_mcp.server_base import mcp
+ from blt_mcp.tools import generate_ai_metadata
+ 
+ logger = logging.getLogger("blt-mcp.v2_tools")
+ 
+ 
++def _client():
++    """Return the HTTP client the server creates at startup; it does not exist yet at import time."""
++    if server_base.http_client is None:
++        raise RuntimeError("HTTP client is not initialized; the server lifespan has not started.")
++    return server_base.http_client
++
++
+ @mcp.tool()
+ async def auth_signup(
+     email: str, password: str, username: str, confirmed: bool = False
+@@ -53,7 +61,7 @@ async def auth_signup(
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.post(
++        response = await _client().post(
+             "/v2/auth/signup", json=payload, headers=headers
+         )
+         response.raise_for_status()
+@@ -71,7 +79,7 @@ async def auth_signin(email: str, password: str) -> str:
+     logger.info("Signing in user")
+     payload = {"email": email, "password": password}
+     try:
+-        response = await http_client.post("/v2/auth/signin", json=payload)
++        response = await _client().post("/v2/auth/signin", json=payload)
+         response.raise_for_status()
+         return f"Successfully signed in: {response.text}"
+     except Exception as e:
+@@ -112,7 +120,7 @@ async def create_bug(
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.post("/v2/bugs", json=payload, headers=headers)
++        response = await _client().post("/v2/bugs", json=payload, headers=headers)
+         response.raise_for_status()
+         return f"Successfully created bug: {title}"
+     except Exception as e:
+@@ -152,7 +160,7 @@ async def update_bug(
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.patch(
++        response = await _client().patch(
+             f"/v2/bugs/{id}", json=payload, headers=headers
+         )
+         response.raise_for_status()
+@@ -195,7 +203,7 @@ async def create_user(
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.post("/v2/users", json=payload, headers=headers)
++        response = await _client().post("/v2/users", json=payload, headers=headers)
+         response.raise_for_status()
+         return f"Successfully created user: {username}"
+     except Exception as e:
+@@ -236,7 +244,7 @@ async def create_job(
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.post("/v2/jobs", json=payload, headers=headers)
++        response = await _client().post("/v2/jobs", json=payload, headers=headers)
+         response.raise_for_status()
+         return f"Successfully created job: {title}"
+     except Exception as e:
+@@ -279,7 +287,7 @@ async def update_job(
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.patch(
++        response = await _client().patch(
+             f"/v2/jobs/{id}", json=payload, headers=headers
+         )
+         response.raise_for_status()
+@@ -308,7 +316,7 @@ async def record_job_view(id: str, confirmed: bool = False) -> str:
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.post(
++        response = await _client().post(
+             f"/v2/jobs/{id}/view", json=payload, headers=headers
+         )
+         response.raise_for_status()
+@@ -348,7 +356,7 @@ async def create_hackathon(
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.post(
++        response = await _client().post(
+             "/v2/hackathons", json=payload, headers=headers
+         )
+         response.raise_for_status()
+@@ -387,7 +395,7 @@ async def update_hackathon(
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.patch(
++        response = await _client().patch(
+             f"/v2/hackathons/{id}", json=payload, headers=headers
+         )
+         response.raise_for_status()
+@@ -418,7 +426,7 @@ async def register_hackathon_participant(
+         "X-AI-Timestamp": ai_metadata["timestamp"],
+     }
+     try:
+-        response = await http_client.post(
++        response = await _client().post(
+             f"/v2/hackathons/{id}/register", json=payload, headers=headers
+         )
+         response.raise_for_status()
+diff --git a/blt-mcp/tests/agent_doc.py b/blt-mcp/tests/agent_doc.py
+new file mode 100644
+index 0000000000..90e4546c45
+--- /dev/null
++++ b/blt-mcp/tests/agent_doc.py
+@@ -0,0 +1,117 @@
++"""
++Checks that the tool reference in AGENT.md matches the registered MCP tool schemas.
++
++`check(markdown, tools)` returns a list of readable problems; an empty list means the document
++agrees with the schemas. It verifies tool names, argument names, required/optional status, argument
++types and the `confirmed` default. Return values, side effects and credentials are prose and are
++not machine-checked.
++
++Two layouts are understood:
++- A `### \\`tool\\`` section with `- \\`arg\\` (type, required|optional[, default \\`x\\`]): ...` bullets.
++- A bullet list of `tool(arg, optional?)` entries; types are not documented there and are not checked.
++"""
++
++import re
++
++SECTION_START = "## 2. Executable Tools"
++SECTION_END = "## 3."
++
++HEADING = re.compile(r"^### `([a-z_]+)`\s*$")
++ARG_LINE = re.compile(r"^\s+- `([a-z_]+)` \(([^)]*)\)")
++COMPACT = re.compile(r"`([a-z_]+)\(([^)]*)\)`")
++
++DOC_TYPES = {
++    "string": "string",
++    "boolean": "boolean",
++    "list of strings": "array",
++}
++
++
++def _schema_type(prop: dict) -> str:
++    if "type" in prop:
++        return prop["type"]
++    kinds = [option["type"] for option in prop.get("anyOf", []) if option.get("type") != "null"]
++    return kinds[0] if len(kinds) == 1 else "unknown"
++
++
++def parse(markdown: str) -> tuple[dict, dict]:
++    """Return (sections, compact): documented tools with typed args, and tools listed as name(args)."""
++    start = markdown.index(SECTION_START)
++    end = markdown.index(SECTION_END, start)
++    sections: dict[str, dict] = {}
++    compact: dict[str, dict] = {}
++    current = None
++    for line in markdown[start:end].splitlines():
++        heading = HEADING.match(line)
++        if heading:
++            current = heading.group(1)
++            sections[current] = {}
++            continue
++        if line.startswith("#"):
++            current = None
++            continue
++        arg = ARG_LINE.match(line)
++        if arg and current:
++            sections[current][arg.group(1)] = [part.strip() for part in arg.group(2).split(",")]
++            continue
++        for name, args in COMPACT.findall(line):
++            compact[name] = {
++                "args": {a.strip().rstrip("?"): a.strip().endswith("?") for a in args.split(",") if a.strip()},
++                "takes_confirmed": "does not take `confirmed`" not in line,
++            }
++    return sections, compact
++
++
++def check(markdown: str, tools: list[dict]) -> list[str]:
++    """Compare AGENT.md with `tools`, a list of {"name": ..., "inputSchema": ...} dicts."""
++    sections, compact = parse(markdown)
++    registered = {tool["name"]: tool["inputSchema"] for tool in tools}
++    problems = []
++
++    for name in sorted(set(registered) - set(sections) - set(compact)):
++        problems.append(f"{name}: registered tool is not documented in AGENT.md")
++    for name in sorted((set(sections) | set(compact)) - set(registered)):
++        problems.append(f"{name}: documented tool is not registered")
++
++    for name, doc_args in sections.items():
++        if name not in registered:
++            continue
++        props = registered[name].get("properties", {})
++        required = set(registered[name].get("required", []))
++        for arg in sorted(set(doc_args) - set(props)):
++            problems.append(f"{name}.{arg}: documented argument does not exist")
++        for arg in sorted(set(props) - set(doc_args)):
++            problems.append(f"{name}.{arg}: argument is not documented")
++        for arg, words in doc_args.items():
++            if arg not in props:
++                continue
++            doc_type = DOC_TYPES.get(words[0], words[0])
++            if doc_type != _schema_type(props[arg]):
++                problems.append(f"{name}.{arg}: documented type '{words[0]}' but schema type is '{_schema_type(props[arg])}'")
++            status = "required" if "required" in words else "optional" if "optional" in words else None
++            actual = "required" if arg in required else "optional"
++            if status != actual:
++                problems.append(f"{name}.{arg}: documented as {status} but schema says {actual}")
++        if "confirmed" in props:
++            default = props["confirmed"].get("default")
++            line = next((w for w in doc_args["confirmed"] if w.startswith("default")), "")
++            if line != f"default `{str(default).lower()}`":
++                problems.append(f"{name}.confirmed: documented default does not match schema default {default}")
++
++    for name, entry in compact.items():
++        if name not in registered:
++            continue
++        props = registered[name].get("properties", {})
++        required = set(registered[name].get("required", []))
++        has_confirmed = "confirmed" in props
++        if entry["takes_confirmed"] != has_confirmed:
++            problems.append(f"{name}: documented {'with' if entry['takes_confirmed'] else 'without'} `confirmed` but schema is the opposite")
++        schema_args = {arg: arg not in required for arg in props if arg != "confirmed"}
++        for arg in sorted(set(entry["args"]) - set(schema_args)):
++            problems.append(f"{name}.{arg}: documented argument does not exist")
++        for arg in sorted(set(schema_args) - set(entry["args"])):
++            problems.append(f"{name}.{arg}: argument is not documented")
++        for arg, optional in entry["args"].items():
++            if arg in schema_args and optional != schema_args[arg]:
++                problems.append(f"{name}.{arg}: documented as {'optional' if optional else 'required'} but schema says {'optional' if schema_args[arg] else 'required'}")
++    return problems
+diff --git a/blt-mcp/tests/test_agent_doc.py b/blt-mcp/tests/test_agent_doc.py
+new file mode 100644
+index 0000000000..c48e524655
+--- /dev/null
++++ b/blt-mcp/tests/test_agent_doc.py
+@@ -0,0 +1,70 @@
++"""
++Keeps the tool reference in AGENT.md in step with the tools registered on the MCP server.
++
++- `test_agent_doc_matches_registered_tools`: fails with one line per mismatch when AGENT.md and the
++  registered tool schemas disagree (see `tests/agent_doc.py` for what is checked).
++- The remaining tests feed the checker deliberately wrong documents and schemas to prove it reports drift.
++"""
++
++import copy
++from pathlib import Path
++
++import pytest
++
++import blt_mcp.server  # noqa: F401  (registers the tools)
++from blt_mcp.server_base import mcp
++from tests import agent_doc
++
++AGENT_MD = (Path(__file__).resolve().parent.parent / "AGENT.md").read_text()
++
++
++@pytest.fixture
++async def tools():
++    return [{"name": t.name, "inputSchema": t.inputSchema} for t in await mcp.list_tools()]
++
++
++async def test_agent_doc_matches_registered_tools(tools):
++    assert agent_doc.check(AGENT_MD, tools) == []
++
++
++async def test_detects_undocumented_and_removed_tools(tools):
++    fake = tools + [{"name": "brand_new_tool", "inputSchema": {"properties": {}}}]
++    trimmed = AGENT_MD.replace("### `summarize_issue_context`", "### `summarise_issue_context`")
++    problems = agent_doc.check(trimmed, fake)
++    assert "brand_new_tool: registered tool is not documented in AGENT.md" in problems
++    assert "summarize_issue_context: registered tool is not documented in AGENT.md" in problems
++    assert "summarise_issue_context: documented tool is not registered" in problems
++
++
++async def test_detects_renamed_argument(tools):
++    stale = AGENT_MD.replace("`comment_text` (string, required)", "`text` (string, required)")
++    problems = agent_doc.check(stale, tools)
++    assert "add_comment.text: documented argument does not exist" in problems
++    assert "add_comment.comment_text: argument is not documented" in problems
++
++
++async def test_detects_required_type_and_default_mismatch(tools):
++    stale = AGENT_MD.replace("`title` (string, required): Title of the bug.", "`title` (string, optional): Title of the bug.")
++    stale = stale.replace("`issue_id` (string, required): ID of the issue to comment on.", "`issue_id` (boolean, required): ID of the issue to comment on.")
++    stale = stale.replace("(boolean, optional, default `false`)", "(boolean, optional, default `true`)", 1)
++    problems = agent_doc.check(stale, tools)
++    assert "submit_issue.title: documented as optional but schema says required" in problems
++    assert "add_comment.issue_id: documented type 'boolean' but schema type is 'string'" in problems
++    assert any(p.startswith("submit_issue.confirmed: documented default") for p in problems)
++
++
++async def test_detects_v2_list_drift(tools):
++    stale = AGENT_MD.replace("`create_bug(title, description, repo_id?, labels?, assignee?)`", "`create_bug(title, description, repo_id, labels?, severity?)`")
++    stale = stale.replace("`auth_signin(email, password)` does not take `confirmed`.", "`auth_signin(email, password)`.")
++    problems = agent_doc.check(stale, tools)
++    assert "create_bug.repo_id: documented as required but schema says optional" in problems
++    assert "create_bug.severity: documented argument does not exist" in problems
++    assert "create_bug.assignee: argument is not documented" in problems
++    assert any(p.startswith("auth_signin: documented with `confirmed`") for p in problems)
++
++
++async def test_detects_schema_change(tools):
++    changed = copy.deepcopy(tools)
++    schema = next(t for t in changed if t["name"] == "draft_vision_issue")["inputSchema"]
++    schema["properties"]["style"] = {"type": "string"}
++    assert "draft_vision_issue.style: argument is not documented" in agent_doc.check(AGENT_MD, changed)
+diff --git a/blt-mcp/tests/test_write_confirmation.py b/blt-mcp/tests/test_write_confirmation.py
+new file mode 100644
+index 0000000000..2a3be59f91
+--- /dev/null
++++ b/blt-mcp/tests/test_write_confirmation.py
+@@ -0,0 +1,168 @@
++"""
++Confirmation tests for every write tool, run through the registered tool dispatch (`mcp.call_tool`).
++
++For each tool whose schema has a `confirmed` argument:
++- `confirmed` omitted and `confirmed=False`: the call is rejected with the confirmation error and no HTTP
++  request is made.
++- `confirmed=True`: exactly one HTTP request is made.
++- A malformed `confirmed` value is rejected by schema validation and no HTTP request is made.
++
++`test_write_tool_set_is_explicit` fails when a tool gains or loses `confirmed`, so a new tool has to be
++classified here on purpose.
++"""
++
++from unittest.mock import AsyncMock, MagicMock
++
++import pytest
++
++import blt_mcp.server  # noqa: F401  (registers the tools)
++from blt_mcp import server_base
++from blt_mcp.server_base import mcp
++
++WRITE_TOOLS = {
++    "submit_issue",
++    "add_comment",
++    "auth_signup",
++    "create_bug",
++    "update_bug",
++    "create_user",
++    "create_job",
++    "update_job",
++    "record_job_view",
++    "create_hackathon",
++    "update_hackathon",
++    "register_hackathon_participant",
++}
++NO_CONFIRMATION_TOOLS = {"auth_signin", "summarize_issue_context", "triage_vulnerability", "draft_vision_issue"}
++CONFIRMATION_ERROR = "Write operation requires confirmation"
++
++
++def _minimal_args(schema: dict) -> dict:
++    return {name: "1" for name in schema.get("required", [])}
++
++
++@pytest.fixture
++def http(monkeypatch):
++    """Replace the HTTP client used by the v1 and v2 tools and record every request."""
++    response = MagicMock()
++    response.raise_for_status = MagicMock()
++    response.json = MagicMock(return_value={"id": 1})
++    response.text = "{}"
++    client = MagicMock()
++    for method in ("get", "post", "patch", "put", "delete", "request"):
++        setattr(client, method, AsyncMock(return_value=response))
++    monkeypatch.setattr(server_base, "http_client", client)
++    return client
++
++
++def _requests_made(client) -> int:
++    return sum(getattr(client, m).await_count for m in ("get", "post", "patch", "put", "delete", "request"))
++
++
++async def _schemas():
++    return {t.name: t.inputSchema for t in await mcp.list_tools()}
++
++
++async def test_write_tool_set_is_explicit():
++    schemas = await _schemas()
++    with_confirmed = {name for name, schema in schemas.items() if "confirmed" in schema.get("properties", {})}
++    assert with_confirmed == WRITE_TOOLS
++    assert set(schemas) == WRITE_TOOLS | NO_CONFIRMATION_TOOLS
++    for name in WRITE_TOOLS:
++        assert schemas[name]["properties"]["confirmed"]["default"] is False
++        assert "confirmed" not in schemas[name].get("required", [])
++
++
++@pytest.mark.parametrize("tool", sorted(WRITE_TOOLS))
++async def test_confirmation_omitted_is_rejected(tool, http):
++    args = _minimal_args((await _schemas())[tool])
++    with pytest.raises(Exception, match=CONFIRMATION_ERROR):
++        await mcp.call_tool(tool, args)
++    assert _requests_made(http) == 0
++
++
++@pytest.mark.parametrize("tool", sorted(WRITE_TOOLS))
++async def test_confirmation_false_is_rejected(tool, http):
++    args = {**_minimal_args((await _schemas())[tool]), "confirmed": False}
++    with pytest.raises(Exception, match=CONFIRMATION_ERROR):
++        await mcp.call_tool(tool, args)
++    assert _requests_made(http) == 0
++
++
++@pytest.mark.parametrize("tool", sorted(WRITE_TOOLS))
++async def test_confirmation_true_performs_the_write(tool, http):
++    args = {**_minimal_args((await _schemas())[tool]), "confirmed": True}
++    await mcp.call_tool(tool, args)
++    assert _requests_made(http) == 1
++    method = next(m for m in ("post", "patch", "put", "delete") if getattr(http, m).await_count)
++    assert method in {"post", "patch"}
++
++
++@pytest.mark.parametrize("tool", sorted(WRITE_TOOLS))
++async def test_malformed_confirmation_is_rejected(tool, http):
++    args = {**_minimal_args((await _schemas())[tool]), "confirmed": "maybe"}
++    with pytest.raises(Exception, match="confirmed"):
++        await mcp.call_tool(tool, args)
++    assert _requests_made(http) == 0
++
++
++V2_WRITE_TOOLS = sorted(WRITE_TOOLS - {"submit_issue", "add_comment"})
++
++
++@pytest.mark.parametrize("tool", V2_WRITE_TOOLS)
++async def test_v2_tools_use_the_client_created_at_startup(tool, monkeypatch):
++    """Regression: v2 tools once kept the import-time client (None) instead of the one the lifespan creates."""
++    monkeypatch.setattr(server_base, "http_client", None)
++    args = {**_minimal_args((await _schemas())[tool]), "confirmed": True}
++    with pytest.raises(Exception, match="HTTP client is not initialized"):
++        await mcp.call_tool(tool, args)
++
++
++async def test_v2_write_works_after_the_server_lifespan_starts():
++    async with server_base.server_lifespan(mcp):
++        assert server_base.http_client is not None
++        result = await mcp.call_tool("create_bug", {"title": "t", "description": "d", "confirmed": True})
++    assert "Successfully created bug: t" in str(result)
++    assert server_base.http_client is not None and server_base.http_client.is_closed
++
++
++# tool -> (HTTP method, path, body fields it must send); every required argument is "1" in these calls.
++V2_REQUESTS = {
++    "auth_signup": ("post", "/v2/auth/signup", {"email": "1", "password": "1", "username": "1"}),
++    "create_bug": ("post", "/v2/bugs", {"title": "1", "description": "1"}),
++    "update_bug": ("patch", "/v2/bugs/1", {}),
++    "create_user": ("post", "/v2/users", {"username": "1", "email": "1", "password": "1"}),
++    "create_job": ("post", "/v2/jobs", {"title": "1", "description": "1", "company": "1"}),
++    "update_job": ("patch", "/v2/jobs/1", {}),
++    "record_job_view": ("post", "/v2/jobs/1/view", {}),
++    "create_hackathon": ("post", "/v2/hackathons", {"name": "1", "description": "1"}),
++    "update_hackathon": ("patch", "/v2/hackathons/1", {}),
++    "register_hackathon_participant": ("post", "/v2/hackathons/1/register", {"user_id": "1"}),
++}
++
++
++def test_v2_request_table_covers_every_v2_write_tool():
++    assert set(V2_REQUESTS) == set(V2_WRITE_TOOLS)
++
++
++@pytest.mark.parametrize("tool", V2_WRITE_TOOLS)
++async def test_v2_confirmed_request_method_path_and_payload(tool, http):
++    method, path, fields = V2_REQUESTS[tool]
++    args = {**_minimal_args((await _schemas())[tool]), "confirmed": True}
++    await mcp.call_tool(tool, args)
++    call = getattr(http, method).await_args
++    assert call.args[0] == path
++    body = call.kwargs["json"]
++    assert fields.items() <= body.items()
++    assert "confirmed" not in body
++    assert body["metadata"]["ai_generated"] is True
++    assert call.kwargs["headers"]["X-AI-Generated"] == "true"
++
++
++@pytest.mark.parametrize("tool", V2_WRITE_TOOLS)
++async def test_v2_http_error_is_reported_not_swallowed(tool, http):
++    http.post.return_value.raise_for_status.side_effect = RuntimeError("500 from API")
++    http.patch.return_value.raise_for_status.side_effect = RuntimeError("500 from API")
++    args = {**_minimal_args((await _schemas())[tool]), "confirmed": True}
++    with pytest.raises(Exception, match="500 from API"):
++        await mcp.call_tool(tool, args)
