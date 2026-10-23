@@ -124,3 +124,45 @@ async def test_v2_write_works_after_the_server_lifespan_starts():
         result = await mcp.call_tool("create_bug", {"title": "t", "description": "d", "confirmed": True})
     assert "Successfully created bug: t" in str(result)
     assert server_base.http_client is not None and server_base.http_client.is_closed
+
+
+# tool -> (HTTP method, path, body fields it must send); every required argument is "1" in these calls.
+V2_REQUESTS = {
+    "auth_signup": ("post", "/v2/auth/signup", {"email": "1", "password": "1", "username": "1"}),
+    "create_bug": ("post", "/v2/bugs", {"title": "1", "description": "1"}),
+    "update_bug": ("patch", "/v2/bugs/1", {}),
+    "create_user": ("post", "/v2/users", {"username": "1", "email": "1", "password": "1"}),
+    "create_job": ("post", "/v2/jobs", {"title": "1", "description": "1", "company": "1"}),
+    "update_job": ("patch", "/v2/jobs/1", {}),
+    "record_job_view": ("post", "/v2/jobs/1/view", {}),
+    "create_hackathon": ("post", "/v2/hackathons", {"name": "1", "description": "1"}),
+    "update_hackathon": ("patch", "/v2/hackathons/1", {}),
+    "register_hackathon_participant": ("post", "/v2/hackathons/1/register", {"user_id": "1"}),
+}
+
+
+def test_v2_request_table_covers_every_v2_write_tool():
+    assert set(V2_REQUESTS) == set(V2_WRITE_TOOLS)
+
+
+@pytest.mark.parametrize("tool", V2_WRITE_TOOLS)
+async def test_v2_confirmed_request_method_path_and_payload(tool, http):
+    method, path, fields = V2_REQUESTS[tool]
+    args = {**_minimal_args((await _schemas())[tool]), "confirmed": True}
+    await mcp.call_tool(tool, args)
+    call = getattr(http, method).await_args
+    assert call.args[0] == path
+    body = call.kwargs["json"]
+    assert fields.items() <= body.items()
+    assert "confirmed" not in body
+    assert body["metadata"]["ai_generated"] is True
+    assert call.kwargs["headers"]["X-AI-Generated"] == "true"
+
+
+@pytest.mark.parametrize("tool", V2_WRITE_TOOLS)
+async def test_v2_http_error_is_reported_not_swallowed(tool, http):
+    http.post.return_value.raise_for_status.side_effect = RuntimeError("500 from API")
+    http.patch.return_value.raise_for_status.side_effect = RuntimeError("500 from API")
+    args = {**_minimal_args((await _schemas())[tool]), "confirmed": True}
+    with pytest.raises(Exception, match="500 from API"):
+        await mcp.call_tool(tool, args)
