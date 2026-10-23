@@ -1,0 +1,113 @@
+From 500f88f0ca756c90611871e3996be1cbf46c15fb Mon Sep 17 00:00:00 2001
+From: Navodit-Sahai <sahainavodit781@gmail.com>
+Date: Thu, 22 Oct 2026 14:03:14 +0530
+Subject: [PATCH] Fix mobile sidebar: add toggle button, outside-click close,
+ auto-close on nav select, and padding fix; address review feedback
+ (accessibility, selector, offset, scope, housekeeping)
+
+---
+ blt-newsletter/public/dashboard.html | 49 ++++++++++++++++++++++------
+ 1 file changed, 39 insertions(+), 10 deletions(-)
+
+diff --git a/blt-newsletter/public/dashboard.html b/blt-newsletter/public/dashboard.html
+index 7008b7a8b8..e9a10c3375 100644
+--- a/blt-newsletter/public/dashboard.html
++++ b/blt-newsletter/public/dashboard.html
+@@ -328,14 +328,14 @@
+         background: linear-gradient(to right, #10b981, #34d399);
+         transition: width 300ms ease;
+       }
+-
++      
+       @media (max-width: 768px) {
+         .sidebar {
+-          display: none;
++          display: none !important;
+           background-color: var(--surface-light);
+         }
+         .sidebar.active {
+-          display: flex;
++          display: flex !important;
+           position: fixed;
+           inset: 0;
+           background: rgba(0, 0, 0, 0.5);
+@@ -348,10 +348,10 @@
+           height: 100vh;
+           background-color: var(--surface-light);
+         }
+-        body.px-8 {
+-          padding-left: 1rem;
+-          padding-right: 1rem;
+-        }
++        #page-title-container {
++        padding-left: 3.5rem;
++        padding-right: 1rem;
++      }
+ 
+         .card {
+           margin-bottom: 1rem;
+@@ -373,9 +373,10 @@
+       <button type="button" slot="actions" onclick="logout()">Logout</button>
+     </blt-nav>
+     <!-- Dashboard Shell -->
+-    <div id="dashboard-shell" class="flex min-h-0 flex-1 overflow-hidden">
++    <div id="dashboard-shell" class="relative flex min-h-0 flex-1 overflow-hidden">
+       <!-- Sidebar -->
+-      <aside class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
++      <button type="button" id="sidebar-toggle" aria-label="Open navigation" aria-controls="dashboard-sidebar" aria-expanded="false" class="md:hidden absolute top-3 left-3 z-[60] bg-white border rounded-lg p-2 shadow"><i class="fa-solid fa-bars"></i></button>
++      <aside id="dashboard-sidebar" class="sidebar w-64 border-r flex flex-col bg-white flex-none transition-colors" style="border-right-color: var(--border-light); background-color: var(--surface-light);">
+         <div class="sidebar-content p-6 flex flex-col h-full" style="color: var(--text-primary-light);">
+           <div class="flex items-center gap-2 mb-8">
+             <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-white shadow-sm">
+@@ -429,7 +430,7 @@
+         <!-- Pages Container -->
+         <div class="flex-1 overflow-y-auto">
+           <!-- Page title (set by navigateTo) -->
+-          <div class="px-8 pt-8">
++          <div id="page-title-container" class="px-8 pt-8">
+             <h1 id="page-title" class="text-xl font-semibold" style="color: var(--text-primary-light);">Overview</h1>
+             <p id="page-desc" class="text-sm" style="color: var(--text-muted-light);">Monitor newsletter health and activity</p>
+           </div>
+@@ -1309,7 +1310,31 @@
+                     <td colspan="${colspan}" class="text-center text-gray-500 py-8">${escapeHtml(message)}</td>
+                   </tr>`;
+       }
++      document.getElementById('sidebar-toggle').addEventListener('click', function() {
++        const sidebar = document.getElementById('dashboard-sidebar');
++        const isActive = sidebar.classList.toggle('active');
++        this.setAttribute('aria-expanded', isActive);
++      });
++
++      document.addEventListener('click', function(e) {
++        const sidebar = document.getElementById('dashboard-sidebar');
++        const toggleBtn = document.getElementById('sidebar-toggle');
++        if (!sidebar.classList.contains('active')) return;
++        if (sidebar.contains(e.target) && e.target.closest('.sidebar-content')) return;
++        if (toggleBtn.contains(e.target)) return;
++        sidebar.classList.remove('active');
++        toggleBtn.setAttribute('aria-expanded', 'false');
++      });
+ 
++      document.addEventListener('keydown', function(e) {
++        if (e.key === 'Escape') {
++          const sidebar = document.getElementById('dashboard-sidebar');
++          if (sidebar.classList.contains('active')) {
++            sidebar.classList.remove('active');
++            document.getElementById('sidebar-toggle').setAttribute('aria-expanded', 'false');
++          }
++        }
++      });
+       function navigateTo(page) {
+         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+         document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
+@@ -1341,6 +1366,10 @@
+         setText('page-title', titles[page] || 'Overview');
+         setText('page-desc', descs[page] || 'Monitor newsletter health and activity');
+         currentPage = page;
++        if (window.innerWidth < 768) {
++          document.getElementById('dashboard-sidebar').classList.remove('active');
++          document.getElementById('sidebar-toggle').setAttribute('aria-expanded', 'false');
++        }
+       }
+ 
+       async function logout() {
