@@ -74,21 +74,21 @@ Analyze a local screenshot with Cloudflare Vision AI and draft an issue report f
 - **Returns**: The model's analysis text.
 - **Requires**: `CF_ACCOUNT_ID` and `CF_API_TOKEN` in the server environment. The model can be overridden with `CF_VISION_MODEL`. Invalid paths and missing credentials raise errors.
 
-### Other write tools (v2 API)
+### Other tools (v2 API)
 
-These tools are also registered, and every one of them except `auth_signin` requires `confirmed=true`:
+These tools are also registered. Arguments marked `?` are optional. Every tool in the first list takes `confirmed` (default `false`) and requires `confirmed=true`; see [Confirmation](#confirmation-for-write-tools).
 
-- `auth_signup(email, password, username)`, `auth_signin(email, password)`
+- `auth_signup(email, password, username)`
 - `create_bug(title, description, repo_id?, labels?, assignee?)`, `update_bug(id, title?, description?, status?)`
 - `create_user(username, email, password, profile_info?)`
 - `create_job(title, description, company, location?)`, `update_job(id, title?, description?, company?, location?)`, `record_job_view(id)`
 - `create_hackathon(name, description, start_date?, end_date?)`, `update_hackathon(id, name?, description?)`, `register_hackathon_participant(id, user_id)`
 
-Arguments marked `?` are optional.
+`auth_signin(email, password)` does not take `confirmed`.
 
 ### Confirmation for write tools
 
-Write tools take `confirmed` (boolean, default `false`). Called without `confirmed=true`, they do nothing and raise `Write operation requires confirmation. Please set 'confirmed': true to proceed.` Ask the user before retrying with `confirmed=true`. Write calls are tagged as AI-generated (`X-AI-Generated`, `X-AI-Source`, `X-AI-Timestamp` headers and a `metadata` field).
+Write tools take `confirmed` (boolean, default `false`). Called without `confirmed=true`, they do nothing and raise `Write operation requires confirmation. Please set 'confirmed': true to proceed.` Ask the user before retrying with `confirmed=true`. Write calls are tagged as AI-generated with `X-AI-Generated`, `X-AI-Source` and `X-AI-Timestamp` headers; every write tool except `submit_issue` also sends a `metadata` field in the request body.
 
 ---
 
