@@ -945,22 +945,19 @@ class GitHubSportscaster {
                 }
             });
         }
-
-       document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
-                    c.classList.remove('active');
-                    c.setAttribute('aria-pressed', 'false');
-                });
-                chip.classList.add('active');
-                chip.setAttribute('aria-pressed', 'true');
-                this.eventTypeFilter = chip.dataset.type;
-            });
+        document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+        document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
+            c.classList.remove('active');
+            c.setAttribute('aria-pressed', 'false');
         });
-
+        chip.classList.add('active');
+        chip.setAttribute('aria-pressed', 'true');
+        this.eventTypeFilter = chip.dataset.type;
+        });
+       });
         document.querySelectorAll('.preset-chips [data-preset]').forEach(chip => {
             chip.addEventListener('click', () => {
-                // If these preset chips also toggle pressed states:
                 document.querySelectorAll('.preset-chips [data-preset]').forEach(c => {
                     c.classList.remove('active');
                     c.setAttribute('aria-pressed', 'false');
@@ -1025,7 +1022,6 @@ class GitHubSportscaster {
                 if (scopeValueGroup) scopeValueGroup.style.display = 'none';
                 const githubTokenEl = document.getElementById('github-token');
                 if (githubTokenEl) githubTokenEl.value = '';
-                
                 document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
                     c.classList.remove('active');
                     c.setAttribute('aria-pressed', 'false');
@@ -1035,7 +1031,6 @@ class GitHubSportscaster {
                     allChip.classList.add('active');
                     allChip.setAttribute('aria-pressed', 'true');
                 }
-                
                 this.saveConfig();
                 this.resetData();
                 this.fetchActivity();
