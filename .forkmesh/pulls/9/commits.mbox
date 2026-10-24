@@ -1,7 +1,7 @@
-From dd0f22c4fa04cc24deaed2a991b5d5a923a70f2b Mon Sep 17 00:00:00 2001
+From f50bd68bd1b73aa3d6a5f7303b3a66573ee3f8c8 Mon Sep 17 00:00:00 2001
 From: danishistired <iamdanishverma@gmail.com>
 Date: Thu, 22 Oct 2026 23:30:48 +0530
-Subject: [PATCH 1/2] blt-toasty: notify Slack when Toasty finishes triage
+Subject: [PATCH 1/3] blt-toasty: notify Slack when Toasty finishes triage
  (#35)
 
 Maintainers had no signal when Toasty triaged or quarantined an issue.
@@ -749,10 +749,10 @@ index 0000000000..6571c1e03f
 +
 +        assert mock_quarantine.await_args.args[3] is env
 
-From eae86409290420296b1a66b32e5341d46efea290 Mon Sep 17 00:00:00 2001
+From 858b0b72ce912c58f262c5365881576e73f0898e Mon Sep 17 00:00:00 2001
 From: danishistired <iamdanishverma@gmail.com>
 Date: Fri, 23 Oct 2026 15:11:03 +0530
-Subject: [PATCH 2/2] blt-toasty: fix Slack timeout under Pyodide; share issue
+Subject: [PATCH 2/3] blt-toasty: fix Slack timeout under Pyodide; share issue
  URL (#35)
 
 Review follow-up. The 5 s timeout used setTimeout with a Python lambda;
@@ -966,3 +966,868 @@ index 6571c1e03f..5e8fd3ff35 100644
  # ---------------------------------------------------------------------------
  # Pipeline wiring
  # ---------------------------------------------------------------------------
+
+From f80c711ecb4e95feb59bbc38fbca770d4b9630f7 Mon Sep 17 00:00:00 2001
+From: danishistired <iamdanishverma@gmail.com>
+Date: Sat, 24 Oct 2026 13:59:56 +0530
+Subject: [PATCH 3/3] blt-toasty: validate Slack message values; label severity
+ an estimate (#35)
+
+Review follow-up on PR #8.
+
+Trust boundary: every value interpolated into Slack mrkdwn is now
+checked against its expected format before use. Issue numbers must be
+positive integers, event IDs must match [A-Za-z0-9_:-]{1,64}, CWE IDs
+CWE-<digits> or CWE-UNKNOWN, scores finite numbers in [0, 1]. Anything
+else becomes "unknown issue" / "[invalid id]" / "similarity n/a" or is
+dropped. All interpolated text is also escaped (&, <, >), so a crafted
+value cannot form a Slack link, mention or formatting.
+
+Severity: the CWE table is a heuristic, so the field now reads
+"Est. severity (from CWE type)" with a note that it is not an
+assessment of the report. CWEs the table does not know (and missing or
+CWE-UNKNOWN) give "unrated, needs review" instead of a guessed tier.
+notify_triage/build_payload accept an optional assessed_severity; a
+valid tier is shown as "Severity (assessed)" instead of the estimate,
+so a future assessment stage is picked up without notifier changes.
+
+Tests: a SQLite-backed D1 fixture (conftest.sqlite_d1) applies the
+real migrations and runs the notifier's queries, replacing the mock
+that routed by SQL text. New crafted-input tests cover each
+interpolated field, including crafted values stored in D1.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ blt-toasty/DEPLOYMENT.md                |   2 +-
+ blt-toasty/src/slack_notifier.py        | 163 ++++++++++--
+ blt-toasty/tests/conftest.py            |  78 ++++++
+ blt-toasty/tests/test_slack_notifier.py | 336 ++++++++++++++++++------
+ 4 files changed, 464 insertions(+), 115 deletions(-)
+
+diff --git a/blt-toasty/DEPLOYMENT.md b/blt-toasty/DEPLOYMENT.md
+index 1672846e07..6dff974265 100644
+--- a/blt-toasty/DEPLOYMENT.md
++++ b/blt-toasty/DEPLOYMENT.md
+@@ -91,7 +91,7 @@ npx wrangler secret put GITLAB_WEBHOOK_SECRET --env production
+ # RS256 public key (SPKI PEM) required for JWT verification
+ npx wrangler secret put MCP_PUBLIC_KEY --env production
+ 
+-# Optional: Slack incoming webhook for triage notifications (CWE, severity,
++# Optional: Slack incoming webhook for triage notifications (CWE, est. severity,
+ # quarantine status, duplicates; never titles or report text). Unset = off.
+ npx wrangler secret put SLACK_WEBHOOK_URL --env production
+ ```
+diff --git a/blt-toasty/src/slack_notifier.py b/blt-toasty/src/slack_notifier.py
+index 9420693b31..09e2b8344a 100644
+--- a/blt-toasty/src/slack_notifier.py
++++ b/blt-toasty/src/slack_notifier.py
+@@ -3,10 +3,24 @@ Slack notifications for finished Toasty triage.
+ 
+ Posts a Block Kit message to a Slack incoming webhook when an event finishes
+ triage (after duplicate detection) or is quarantined.  The message carries
+-only triage metadata: the issue number, CWE classification, a severity tier
+-derived from the CWE, whether the event was quarantined, and duplicate
+-findings.  It never includes the issue title, body, summary or evidence
+-snippets, so unredacted text cannot reach Slack.
++only triage metadata: the issue number, CWE classification, a severity,
++whether the event was quarantined, and duplicate findings.  It never
++includes the issue title, body, summary or evidence snippets, so unredacted
++text cannot reach Slack.
++
++Trust boundary
++--------------
++Every value interpolated into Slack mrkdwn is validated against its
++expected format first (issue number, event IDs, CWE IDs, scores, severity
++tiers); anything else is replaced by a fixed placeholder.  All interpolated
++text is also escaped (``&``, ``<``, ``>``) so crafted input cannot form
++Slack links, mentions or formatting.
++
++Severity
++--------
++Unless the caller passes a validated ``assessed_severity``, the severity is
++an estimate looked up from the CWE type and is labelled as such.  CWEs the
++table does not know give "unrated, needs review" rather than a guessed tier.
+ 
+ Runtime notes
+ -------------
+@@ -25,6 +39,8 @@ from __future__ import annotations
+ 
+ import json
+ import logging
++import math
++import re
+ from typing import Any
+ 
+ from forge_links import issue_url
+@@ -39,9 +55,21 @@ except ImportError:
+ 
+ SLACK_TIMEOUT_SECONDS = 5
+ MAX_DUPLICATES_SHOWN = 3
++MAX_CWES_SHOWN = 10
++MAX_ISSUE_IID = 10**9
+ 
+-# Severity tier per CWE, roughly following the impact the weakness usually
+-# allows.  Unlisted CWEs fall back to "medium"; no CWE at all is "info".
++# Expected formats of everything interpolated into the message.  Event IDs
++# are ``secrets.token_hex(16)``, optionally prefixed (``shadow:``).
++_CWE_ID_RE = re.compile(r"^CWE-(?:[0-9]{1,5}|UNKNOWN)$")
++_EVENT_ID_RE = re.compile(r"^[A-Za-z0-9_:-]{1,64}$")
++
++INVALID_ID = "[invalid id]"
++UNRATED = "unrated"
++ESTIMATE_NOTE = "Severity is estimated from the CWE type, not an assessment of this report."
++
++# Estimated severity tier per CWE, from the impact the weakness usually
++# allows.  It is a heuristic, not an assessment of a specific report: CWEs
++# missing here are "unrated" and need review.
+ SEVERITY_BY_CWE: dict[str, str] = {
+     "CWE-77": "critical",
+     "CWE-78": "critical",
+@@ -71,7 +99,6 @@ SEVERITY_BY_CWE: dict[str, str] = {
+     "CWE-116": "medium",
+     "CWE-276": "medium",
+     "CWE-476": "low",
+-    "CWE-UNKNOWN": "info",
+ }
+ 
+ _SEVERITY_ORDER = ["info", "low", "medium", "high", "critical"]
+@@ -81,15 +108,67 @@ _SEVERITY_EMOJI = {
+     "medium": ":large_yellow_circle:",
+     "low": ":large_blue_circle:",
+     "info": ":white_circle:",
++    UNRATED: ":grey_question:",
+ }
+ 
+ 
+ def severity_for_cwes(cwe_ids: list[str]) -> str:
+-    """Return the highest severity tier among *cwe_ids*."""
+-    if not cwe_ids:
+-        return "info"
+-    tiers = [SEVERITY_BY_CWE.get(c, "medium") for c in cwe_ids]
+-    return max(tiers, key=_SEVERITY_ORDER.index)
++    """Return the highest estimated tier among *cwe_ids*, or ``"unrated"``.
++
++    Only CWEs in ``SEVERITY_BY_CWE`` count; with none of them the report is
++    unrated and needs review.
++    """
++    tiers = [SEVERITY_BY_CWE[c] for c in cwe_ids if c in SEVERITY_BY_CWE]
++    return max(tiers, key=_SEVERITY_ORDER.index) if tiers else UNRATED
++
++
++def escape_mrkdwn(text: str) -> str:
++    """Escape Slack's control characters so text cannot form links or mentions."""
++    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
++
++
++def safe_issue_iid(value: Any) -> int | None:
++    """Return *value* as a positive issue number, or None if it is not one."""
++    if isinstance(value, bool):
++        return None
++    if isinstance(value, str) and value.isascii() and value.isdigit():
++        value = int(value)
++    if isinstance(value, int) and 0 < value <= MAX_ISSUE_IID:
++        return value
++    return None
++
++
++def safe_event_id(value: Any) -> str | None:
++    """Return *value* if it looks like a triage event ID, else None."""
++    if isinstance(value, str) and _EVENT_ID_RE.match(value):
++        return value
++    return None
++
++
++def safe_cwe_ids(values: Any) -> list[str]:
++    """Keep well-formed, distinct CWE IDs (``CWE-<digits>`` or ``CWE-UNKNOWN``)."""
++    if not isinstance(values, (list, tuple)):
++        return []
++    seen: list[str] = []
++    for v in values:
++        if isinstance(v, str) and _CWE_ID_RE.match(v) and v not in seen:
++            seen.append(v)
++    return seen[:MAX_CWES_SHOWN]
++
++
++def safe_score(value: Any) -> float | None:
++    """Return *value* as a similarity score in [0, 1], or None."""
++    if isinstance(value, bool) or not isinstance(value, (int, float)):
++        return None
++    score = float(value)
++    return score if math.isfinite(score) and 0.0 <= score <= 1.0 else None
++
++
++def safe_severity(value: Any) -> str | None:
++    """Return *value* if it is one of the known severity tiers, else None."""
++    if isinstance(value, str) and value.lower() in _SEVERITY_ORDER:
++        return value.lower()
++    return None
+ 
+ 
+ def quarantine_category(reason: str | None) -> str:
+@@ -106,6 +185,11 @@ def quarantine_category(reason: str | None) -> str:
+     return "other"
+ 
+ 
++def _id_text(value: Any) -> str:
++    event_id = safe_event_id(value)
++    return f"`{event_id}`" if event_id else INVALID_ID
++
++
+ def build_payload(
+     event_id: str,
+     issue_iid: Any,
+@@ -113,9 +197,13 @@ def build_payload(
+     quarantined: bool,
+     quarantine_reason: str | None = None,
+     duplicates: list[dict] | None = None,
++    assessed_severity: str | None = None,
+ ) -> dict:
+     """Build the Slack Block Kit payload for one triage event.
+ 
++    Every argument is untrusted: values that do not match their expected
++    format are replaced by placeholders (see the module docstring).
++
+     Args:
+         event_id: The triage event ID.
+         issue_iid: The forge issue number, or None.
+@@ -124,38 +212,55 @@ def build_payload(
+         quarantine_reason: Raw reason; only its category is sent.
+         duplicates: Confirmed duplicate candidates as
+             ``{"event_id": str, "score": float}`` dicts.
++        assessed_severity: A severity tier assessed for this report by the
++            triage pipeline.  When valid it is shown instead of the CWE
++            estimate.
+ 
+     Returns:
+         A JSON-serialisable dict for the Slack webhook.
+     """
+-    duplicates = duplicates or []
+-    severity = severity_for_cwes(cwe_ids)
+-    issue_ref = f"<{issue_url(issue_iid)}|#{issue_iid}>" if issue_iid else "unknown issue"
++    iid = safe_issue_iid(issue_iid)
++    issue_ref = f"<{issue_url(iid)}|#{iid}>" if iid else "unknown issue"
+     headline = "Toasty quarantined an issue" if quarantined else "Toasty triaged an issue"
++    cwes = safe_cwe_ids(cwe_ids)
+ 
+-    cwe_text = ", ".join(f"{c} ({CWE_LABELS.get(c, 'Unknown')})" for c in cwe_ids) or "none"
+-    quarantine_text = f"yes ({quarantine_category(quarantine_reason)})" if quarantined else "no"
+-    if duplicates:
+-        dup_text = "\n".join(
+-            f"• `{d['event_id']}` (similarity {float(d['score']):.2f})" for d in duplicates[:MAX_DUPLICATES_SHOWN]
+-        )
++    assessed = safe_severity(assessed_severity)
++    if assessed:
++        severity, severity_label, summary_severity = assessed, "Severity (assessed)", f"severity {assessed}"
+     else:
+-        dup_text = "none"
++        severity = severity_for_cwes(cwes)
++        severity_label = "Est. severity (from CWE type)"
++        summary_severity = "unrated, needs review" if severity == UNRATED else f"est. severity {severity}"
++    severity_text = "unrated, needs review" if severity == UNRATED else severity
++
++    cwe_text = ", ".join(f"{c} ({escape_mrkdwn(CWE_LABELS.get(c, 'Unknown'))})" for c in cwes) or "none"
++    quarantine_text = f"yes ({quarantine_category(quarantine_reason)})" if quarantined else "no"
++
++    dup_lines = []
++    for d in (duplicates if isinstance(duplicates, list) else [])[:MAX_DUPLICATES_SHOWN]:
++        d = d if isinstance(d, dict) else {}
++        score = safe_score(d.get("score"))
++        score_text = f"similarity {score:.2f}" if score is not None else "similarity n/a"
++        dup_lines.append(f"• {_id_text(d.get('event_id'))} ({score_text})")
++    dup_text = "\n".join(dup_lines) or "none"
+ 
+     fields = [
+         {"type": "mrkdwn", "text": f"*Issue*\n{issue_ref}"},
+-        {"type": "mrkdwn", "text": f"*Severity*\n{_SEVERITY_EMOJI[severity]} {severity}"},
++        {"type": "mrkdwn", "text": f"*{severity_label}*\n{_SEVERITY_EMOJI[severity]} {severity_text}"},
+         {"type": "mrkdwn", "text": f"*CWE*\n{cwe_text}"},
+         {"type": "mrkdwn", "text": f"*Quarantined*\n{quarantine_text}"},
+     ]
++    context = [{"type": "mrkdwn", "text": f"Triage ID {_id_text(event_id)}"}]
++    if not assessed:
++        context.append({"type": "mrkdwn", "text": ESTIMATE_NOTE})
+ 
+     return {
+-        "text": f"{headline}: {issue_ref} (severity {severity})",
++        "text": f"{headline}: {issue_ref} ({summary_severity})",
+         "blocks": [
+             {"type": "header", "text": {"type": "plain_text", "text": headline}},
+             {"type": "section", "fields": fields},
+             {"type": "section", "text": {"type": "mrkdwn", "text": f"*Possible duplicates*\n{dup_text}"}},
+-            {"type": "context", "elements": [{"type": "mrkdwn", "text": f"Triage ID `{event_id}`"}]},
++            {"type": "context", "elements": context},
+         ],
+     }
+ 
+@@ -180,7 +285,7 @@ async def _load_event_context(db: Any, event_id: str) -> tuple[Any, list[str], s
+     )
+     cwe_raw = _row_get(summary_row, "cwe_hints")
+     try:
+-        cwe_ids = [c for c in json.loads(cwe_raw) if isinstance(c, str)] if cwe_raw else []
++        cwe_ids = safe_cwe_ids(json.loads(cwe_raw)) if cwe_raw else []
+     except (TypeError, ValueError):
+         cwe_ids = []
+     return _row_get(event_row, "issue_iid"), cwe_ids, _row_get(event_row, "quarantine_reason")
+@@ -220,9 +325,13 @@ async def notify_triage(
+     event_id: str,
+     quarantined: bool = False,
+     duplicates: list[dict] | None = None,
++    assessed_severity: str | None = None,
+ ) -> bool:
+     """Send the Slack notification for *event_id*. Never raises.
+ 
++    ``assessed_severity`` is for a future triage stage that assesses the
++    report itself; until then callers omit it and the CWE estimate is shown.
++
+     Returns:
+         True if Slack accepted the message, False if skipped or failed.
+     """
+@@ -231,7 +340,7 @@ async def notify_triage(
+         return False
+     try:
+         issue_iid, cwe_ids, reason = await _load_event_context(db, event_id)
+-        payload = build_payload(event_id, issue_iid, cwe_ids, quarantined, reason, duplicates)
++        payload = build_payload(event_id, issue_iid, cwe_ids, quarantined, reason, duplicates, assessed_severity)
+         return await post_to_slack(webhook_url, payload, env)
+     except Exception as exc:
+         logger.error("Slack notification failed for %s: %s", event_id, type(exc).__name__)
+diff --git a/blt-toasty/tests/conftest.py b/blt-toasty/tests/conftest.py
+index ea685df157..90b33fa441 100644
+--- a/blt-toasty/tests/conftest.py
++++ b/blt-toasty/tests/conftest.py
+@@ -112,3 +112,81 @@ def mock_analytics():
+     analytics = MagicMock()
+     analytics.writeDataPoint = MagicMock()
+     return analytics
++
++
++class SQLiteD1:
++    """In-memory stand-in for a Cloudflare D1 binding, backed by real SQLite.
++
++    Applies the project's migrations, then runs every statement for real, so
++    tests assert on query results and table contents instead of matching SQL
++    text.  Supports the subset of the D1 API the Worker uses:
++    ``prepare(sql).bind(*args)`` with ``first()``, ``run()`` and ``all()``,
++    plus ``batch()``.  ``statements`` records each executed SQL string.
++    """
++
++    class _Meta:
++        def __init__(self, changes):
++            self.changes = changes
++
++    class _Result:
++        def __init__(self, changes=0, results=None):
++            self.meta = SQLiteD1._Meta(changes)
++            self.results = results or []
++
++    class _Statement:
++        def __init__(self, db, sql, args=()):
++            self._db, self.sql, self.args = db, sql, args
++
++        def bind(self, *args):
++            return SQLiteD1._Statement(self._db, self.sql, args)
++
++        def _execute(self):
++            self._db.statements.append(self.sql)
++            return self._db.conn.execute(self.sql, self.args)
++
++        async def first(self):
++            row = self._execute().fetchone()
++            return dict(row) if row is not None else None
++
++        async def all(self):
++            return SQLiteD1._Result(results=[dict(r) for r in self._execute().fetchall()])
++
++        async def run(self):
++            return SQLiteD1._Result(changes=self._execute().rowcount)
++
++    def __init__(self):
++        import sqlite3
++
++        self.conn = sqlite3.connect(":memory:")
++        self.conn.row_factory = sqlite3.Row
++        self.statements = []
++        migrations = os.path.join(_root_dir, "migrations")
++        for name in sorted(f for f in os.listdir(migrations) if f[:4].isdigit() and f.endswith(".sql")):
++            with open(os.path.join(migrations, name), encoding="utf-8") as fh:
++                self.conn.executescript(fh.read())
++
++    def prepare(self, sql):
++        return SQLiteD1._Statement(self, sql)
++
++    async def batch(self, statements):
++        return [await s.run() for s in statements]
++
++    def add_event(self, event_id, *, issue_iid=35, status="pending", quarantine_reason=None):
++        self.conn.execute(
++            "INSERT INTO triage_events (id, delivery_id, gitlab_event, project_id, issue_iid, raw_payload_hash, "
++            "status, quarantine_reason) VALUES (?, ?, 'Issue Hook', 1, ?, 'hash', ?, ?)",
++            (event_id, f"delivery-{event_id}", issue_iid, status, quarantine_reason),
++        )
++
++    def add_summary(self, event_id, *, cwe_hints="[]", executive_summary="summary", reviewer_pack=None):
++        self.conn.execute(
++            "INSERT INTO triage_summaries (id, triage_event_id, executive_summary, reviewer_pack, cwe_hints, "
++            "model_used) VALUES (?, ?, ?, ?, ?, 'test-model')",
++            (f"sum-{event_id}", event_id, executive_summary, reviewer_pack, cwe_hints),
++        )
++
++
++@pytest.fixture
++def sqlite_d1():
++    """A fresh SQLite-backed D1 with all migrations applied."""
++    return SQLiteD1()
+diff --git a/blt-toasty/tests/test_slack_notifier.py b/blt-toasty/tests/test_slack_notifier.py
+index 5e8fd3ff35..22c03ab4cd 100644
+--- a/blt-toasty/tests/test_slack_notifier.py
++++ b/blt-toasty/tests/test_slack_notifier.py
+@@ -2,17 +2,22 @@
+ 
+ Covers:
+     1. Payload carries issue link, CWE, severity, quarantine status, duplicates
+-    2. Payload never carries the title or report text (redaction invariant)
+-    3. Quarantine reasons are reduced to a fixed category
+-    4. Severity tier derived from CWEs
+-    5. No webhook configured → nothing sent
+-    6. Slack errors are swallowed
+-    7. Wiring: duplicate detection, quarantine and redaction notify Slack
++    2. Severity is labelled as a CWE estimate; unknown CWEs are "unrated,
++       needs review"; a valid assessed severity replaces the estimate
++    3. Trust boundary: crafted values in every interpolated field cannot form
++       Slack links, mentions or formatting
++    4. Report text and PII stored in D1 never reach Slack
++    5. No webhook configured → nothing sent; Slack errors are swallowed
++    6. Wiring: duplicate detection, quarantine and redaction notify Slack
++
++D1 is the SQLite-backed ``sqlite_d1`` fixture from ``conftest.py``: the real
++migrations are applied and the notifier's queries run for real.
+ """
+ 
+ from __future__ import annotations
+ 
+ import json
++import re
+ import sys
+ import types
+ from unittest.mock import AsyncMock, MagicMock, patch
+@@ -20,13 +25,36 @@ from unittest.mock import AsyncMock, MagicMock, patch
+ import pytest
+ 
+ from src.slack_notifier import (
++    ESTIMATE_NOTE,
++    INVALID_ID,
+     build_payload,
++    escape_mrkdwn,
+     notify_triage,
+     quarantine_category,
++    safe_cwe_ids,
++    safe_event_id,
++    safe_issue_iid,
++    safe_score,
+     severity_for_cwes,
+ )
+ 
+ WEBHOOK = "https://hooks.slack.com/services/T000/B000/XXXX"
++EVENT_ID = "0123456789abcdef0123456789abcdef"  # secrets.token_hex(16)
++DUP_ID = "fedcba9876543210fedcba9876543210"
++PII = ("alice@example.com", "555-123-4567")
++
++# Slack control sequences a crafted value could try to smuggle in.
++CRAFTED = [
++    "<https://evil.example|Click to verify>",
++    "<!channel>",
++    "<@U123ABC>",
++    "x` <https://evil.example|y> `",
++    "*bold* _it_ ~strike~",
++    "35|evil>",
++    "a" * 500,
++    "line1\nline2",
++    "&lt;script&gt;",
++]
+ 
+ 
+ @pytest.fixture(autouse=True)
+@@ -39,34 +67,6 @@ def _no_workers_runtime():
+         yield
+ 
+ 
+-PII_TITLE = "SQLi in login, contact alice@example.com 555-123-4567"
+-
+-
+-def _make_db(*, issue_iid=35, cwe_hints=("CWE-89",), quarantine_reason=None, title=PII_TITLE):
+-    """Mock D1 handle that answers the notifier's two SELECTs.
+-
+-    The event row also carries a raw ``title`` so tests can prove the
+-    notifier never forwards it.
+-    """
+-
+-    def prepare_side_effect(sql):
+-        sql_lower = sql.lower()
+-        if "from triage_events" in sql_lower:
+-            row = {"issue_iid": issue_iid, "quarantine_reason": quarantine_reason, "title": title}
+-        elif "from triage_summaries" in sql_lower:
+-            row = {"cwe_hints": json.dumps(list(cwe_hints))} if cwe_hints is not None else None
+-        else:
+-            row = None
+-        stmt = MagicMock()
+-        stmt.bind = MagicMock(return_value=stmt)
+-        stmt.first = AsyncMock(return_value=row)
+-        return stmt
+-
+-    db = MagicMock()
+-    db.prepare = MagicMock(side_effect=prepare_side_effect)
+-    return db
+-
+-
+ class _Env:
+     def __init__(self, webhook=WEBHOOK, status=200, fetch_error=None):
+         self.SLACK_WEBHOOK_URL = webhook
+@@ -84,6 +84,27 @@ def _sent_payload(env):
+     return json.loads(options["body"])
+ 
+ 
++def _mrkdwn_texts(payload):
++    """Every string Slack will render as mrkdwn, including the fallback text."""
++    texts = [payload["text"]]
++    for block in payload["blocks"]:
++        if block["type"] == "section":
++            texts += [f["text"] for f in block.get("fields", [])]
++            if "text" in block:
++                texts.append(block["text"]["text"])
++        elif block["type"] == "context":
++            texts += [e["text"] for e in block["elements"]]
++    return texts
++
++
++def _assert_no_injected_markup(payload):
++    """Only the notifier's own issue link may use Slack's <...> syntax."""
++    for text in _mrkdwn_texts(payload):
++        for match in re.findall(r"<[^>]*>", text):
++            assert re.fullmatch(r"<https://git\.owaspblt\.org/BLT/issues/\d+\|#\d+>", match), match
++        assert "<!" not in text and "<@" not in text
++
++
+ # ---------------------------------------------------------------------------
+ # Payload
+ # ---------------------------------------------------------------------------
+@@ -92,43 +113,38 @@ def _sent_payload(env):
+ class TestBuildPayload:
+     def test_contains_triage_fields(self):
+         payload = build_payload(
+-            "evt-1",
+-            35,
+-            ["CWE-89", "CWE-79"],
+-            quarantined=False,
+-            duplicates=[{"event_id": "evt-0", "score": 0.912}],
++            EVENT_ID, 35, ["CWE-89", "CWE-79"], quarantined=False, duplicates=[{"event_id": DUP_ID, "score": 0.912}]
+         )
+         text = json.dumps(payload)
+ 
+-        assert "https://git.owaspblt.org/BLT/issues/35" in text
++        assert "<https://git.owaspblt.org/BLT/issues/35|#35>" in text
+         assert "CWE-89 (SQL Injection)" in text
+         assert "CWE-79 (Cross-Site Scripting (XSS))" in text
+-        assert "critical" in text
+         assert "*Quarantined*\\nno" in text
+-        assert "`evt-0` (similarity 0.91)" in text
+-        assert "evt-1" in text
++        assert f"`{DUP_ID}` (similarity 0.91)" in text
++        assert f"Triage ID `{EVENT_ID}`" in text
+ 
+     def test_no_duplicates_and_unknown_issue(self):
+-        text = json.dumps(build_payload("evt-1", None, [], quarantined=False))
++        text = json.dumps(build_payload(EVENT_ID, None, [], quarantined=False))
+         assert "unknown issue" in text
+         assert "*Possible duplicates*\\nnone" in text
+-        assert "info" in text
+ 
+     def test_quarantine_reason_is_categorised_not_forwarded(self):
+         reason = "Unexpected error during redaction: ValueError: bob@example.com"
+-        text = json.dumps(build_payload("evt-1", 35, [], quarantined=True, quarantine_reason=reason))
++        text = json.dumps(build_payload(EVENT_ID, 35, [], quarantined=True, quarantine_reason=reason))
+         assert "yes (redaction error)" in text
+         assert "bob@example.com" not in text
+ 
+ 
+-class TestHelpers:
++class TestSeverity:
+     @pytest.mark.parametrize(
+         ("cwes", "expected"),
+         [
+-            ([], "info"),
+-            (["CWE-UNKNOWN"], "info"),
++            ([], "unrated"),
++            (["CWE-UNKNOWN"], "unrated"),
++            (["CWE-999"], "unrated"),
+             (["CWE-476"], "low"),
+-            (["CWE-999"], "medium"),
++            (["CWE-999", "CWE-79"], "medium"),
+             (["CWE-79", "CWE-918"], "high"),
+             (["CWE-79", "CWE-89"], "critical"),
+         ],
+@@ -136,6 +152,38 @@ class TestHelpers:
+     def test_severity_for_cwes(self, cwes, expected):
+         assert severity_for_cwes(cwes) == expected
+ 
++    def test_estimate_is_labelled_as_estimate(self):
++        payload = build_payload(EVENT_ID, 35, ["CWE-89"], quarantined=False)
++        text = json.dumps(payload)
++        assert "*Est. severity (from CWE type)*\\n:red_circle: critical" in text
++        assert "(est. severity critical)" in payload["text"]
++        assert ESTIMATE_NOTE in text
++
++    @pytest.mark.parametrize("cwes", [[], ["CWE-UNKNOWN"], ["CWE-12345"]])
++    def test_unknown_cwe_is_unrated_needs_review(self, cwes):
++        payload = build_payload(EVENT_ID, 35, cwes, quarantined=False)
++        text = json.dumps(payload)
++        assert ":grey_question: unrated, needs review" in text
++        assert "(unrated, needs review)" in payload["text"]
++        for tier in ("critical", "high", "medium", "low", "info"):
++            assert f"est. severity {tier}" not in text
++
++    def test_assessed_severity_replaces_estimate(self):
++        payload = build_payload(EVENT_ID, 35, ["CWE-89"], quarantined=False, assessed_severity="Low")
++        text = json.dumps(payload)
++        assert "*Severity (assessed)*\\n:large_blue_circle: low" in text
++        assert "(severity low)" in payload["text"]
++        assert "Est. severity" not in text
++        assert ESTIMATE_NOTE not in text
++
++    @pytest.mark.parametrize("assessed", ["urgent", "<!channel>", "", 5, None])
++    def test_invalid_assessed_severity_falls_back_to_estimate(self, assessed):
++        text = json.dumps(build_payload(EVENT_ID, 35, ["CWE-89"], quarantined=False, assessed_severity=assessed))
++        assert "*Est. severity (from CWE type)*" in text
++        assert ESTIMATE_NOTE in text
++
++
++class TestQuarantineCategory:
+     @pytest.mark.parametrize(
+         ("reason", "expected"),
+         [
+@@ -143,7 +191,7 @@ class TestHelpers:
+             ("Residual PII after Markdown stripping: 1 entities (EMAIL)", "PII leak (redaction gate)"),
+             ("Entity PHONE at [3:15] has confidence 0.40 < threshold 0.85", "PII leak (redaction gate)"),
+             ("Unexpected error during redaction: KeyError: x", "redaction error"),
+-            ("manual review", "other"),
++            ("<https://evil.example|x>", "other"),
+         ],
+     )
+     def test_quarantine_category(self, reason, expected):
+@@ -151,67 +199,181 @@ class TestHelpers:
+ 
+ 
+ # ---------------------------------------------------------------------------
+-# notify_triage
++# Trust boundary: every interpolated value
++# ---------------------------------------------------------------------------
++
++
++class TestValidators:
++    @pytest.mark.parametrize(
++        ("value", "expected"),
++        [(35, 35), ("35", 35), (0, None), (-1, None), (True, None), (10**12, None), ("35a", None), ("٣٥", None)]
++        + [(c, None) for c in CRAFTED],
++    )
++    def test_safe_issue_iid(self, value, expected):
++        assert safe_issue_iid(value) == expected
++
++    @pytest.mark.parametrize(
++        ("value", "ok"),
++        [(EVENT_ID, True), ("shadow:" + EVENT_ID, True), ("evt-1", True), ("", False), (None, False), (35, False)]
++        + [(c, False) for c in CRAFTED],
++    )
++    def test_safe_event_id(self, value, ok):
++        assert safe_event_id(value) == (value if ok else None)
++
++    def test_safe_cwe_ids_keeps_only_well_formed(self):
++        values = ["CWE-89", "CWE-89", "CWE-UNKNOWN", "cwe-79", "CWE-79 ", "CWE-123456", 89, None, *CRAFTED]
++        assert safe_cwe_ids(values) == ["CWE-89", "CWE-UNKNOWN"]
++        assert safe_cwe_ids("CWE-89") == []
++        assert len(safe_cwe_ids([f"CWE-{i}" for i in range(50)])) == 10
++
++    @pytest.mark.parametrize(
++        ("value", "expected"),
++        [(0.9, 0.9), (1, 1.0), (0, 0.0), (1.01, None), (-0.1, None), (float("nan"), None), (float("inf"), None)]
++        + [(True, None), ("0.9", None), (None, None)],
++    )
++    def test_safe_score(self, value, expected):
++        assert safe_score(value) == expected
++
++    def test_escape_mrkdwn(self):
++        assert escape_mrkdwn("<a href> & <!channel>") == "&lt;a href&gt; &amp; &lt;!channel&gt;"
++
++
++class TestCraftedInput:
++    @pytest.mark.parametrize("crafted", CRAFTED)
++    def test_crafted_event_id(self, crafted):
++        payload = build_payload(crafted, 35, ["CWE-89"], quarantined=False)
++        _assert_no_injected_markup(payload)
++        assert f"Triage ID {INVALID_ID}" in json.dumps(payload)
++
++    @pytest.mark.parametrize("crafted", CRAFTED)
++    def test_crafted_issue_number(self, crafted):
++        payload = build_payload(EVENT_ID, crafted, ["CWE-89"], quarantined=False)
++        _assert_no_injected_markup(payload)
++        assert "unknown issue" in payload["text"]
++
++    @pytest.mark.parametrize("crafted", CRAFTED)
++    def test_crafted_duplicate(self, crafted):
++        payload = build_payload(
++            EVENT_ID, 35, ["CWE-89"], quarantined=False, duplicates=[{"event_id": crafted, "score": crafted}]
++        )
++        _assert_no_injected_markup(payload)
++        assert payload["blocks"][2]["text"]["text"] == f"*Possible duplicates*\n• {INVALID_ID} (similarity n/a)"
++
++    @pytest.mark.parametrize("crafted", CRAFTED)
++    def test_crafted_cwe(self, crafted):
++        payload = build_payload(EVENT_ID, 35, [crafted, "CWE-79"], quarantined=False)
++        _assert_no_injected_markup(payload)
++        assert "*CWE*\\nCWE-79 (Cross-Site Scripting (XSS))" in json.dumps(payload)
++
++    @pytest.mark.parametrize("bad", [None, "x", 5, [None, "x", 5], [{"event_id": DUP_ID}]])
++    def test_malformed_duplicates_do_not_raise(self, bad):
++        build_payload(EVENT_ID, 35, [], quarantined=False, duplicates=bad)
++
++    def test_cwe_labels_are_escaped(self):
++        with patch.dict("src.slack_notifier.CWE_LABELS", {"CWE-89": "<https://evil.example|SQLi>"}):
++            payload = build_payload(EVENT_ID, 35, ["CWE-89"], quarantined=False)
++        _assert_no_injected_markup(payload)
++        assert "&lt;https://evil.example|SQLi&gt;" in json.dumps(payload)
++
++
++# ---------------------------------------------------------------------------
++# notify_triage against SQLite-backed D1
+ # ---------------------------------------------------------------------------
+ 
+ 
+ class TestNotifyTriage:
+     @pytest.mark.asyncio
+-    async def test_posts_payload_without_title(self):
++    async def test_posts_metadata_only(self, sqlite_d1):
++        sqlite_d1.add_event(EVENT_ID, issue_iid=35)
++        sqlite_d1.add_summary(
++            EVENT_ID,
++            cwe_hints='["CWE-89"]',
++            executive_summary=f"SQLi in /login reported by {PII[0]}",
++            reviewer_pack=f"call {PII[1]}",
++        )
+         env = _Env()
+-        ok = await notify_triage(env, _make_db(), "evt-1", duplicates=[{"event_id": "evt-0", "score": 0.9}])
++
++        ok = await notify_triage(env, sqlite_d1, EVENT_ID, duplicates=[{"event_id": DUP_ID, "score": 0.9}])
+ 
+         assert ok is True
+-        payload = _sent_payload(env)
+-        text = json.dumps(payload)
+-        assert "CWE-89" in text
+-        assert "issues/35" in text
+-        assert "alice@example.com" not in text
+-        assert "555-123-4567" not in text
+-        assert "login" not in text
++        text = json.dumps(_sent_payload(env))
++        assert "CWE-89" in text and "issues/35" in text and DUP_ID in text
++        for leaked in (*PII, "/login", "SQLi in"):
++            assert leaked not in text
+ 
+     @pytest.mark.asyncio
+-    async def test_quarantined_event(self):
++    async def test_reads_only(self, sqlite_d1):
++        sqlite_d1.add_event(EVENT_ID)
++        await notify_triage(_Env(), sqlite_d1, EVENT_ID)
++        assert sqlite_d1.statements and all(s.lstrip().upper().startswith("SELECT") for s in sqlite_d1.statements)
++
++    @pytest.mark.asyncio
++    async def test_quarantined_event(self, sqlite_d1):
++        sqlite_d1.add_event(
++            EVENT_ID, status="quarantined", quarantine_reason="Residual PII after Markdown stripping: 1 entities"
++        )
+         env = _Env()
+-        db = _make_db(cwe_hints=None, quarantine_reason="Residual PII after Markdown stripping: 1 entities (EMAIL)")
+-        assert await notify_triage(env, db, "evt-2", quarantined=True) is True
+-        text = json.dumps(_sent_payload(env))
++        assert await notify_triage(env, sqlite_d1, EVENT_ID, quarantined=True) is True
++        payload = _sent_payload(env)
++        text = json.dumps(payload)
+         assert "Toasty quarantined an issue" in text
+         assert "PII leak (redaction gate)" in text
++        assert "unrated, needs review" in text  # no summary row, so no CWE
++
++    @pytest.mark.asyncio
++    async def test_crafted_values_stored_in_d1(self, sqlite_d1):
++        crafted = "<https://evil.example|Click to verify>"
++        sqlite_d1.add_event(EVENT_ID, issue_iid=crafted)  # SQLite stores text in an INTEGER column
++        sqlite_d1.add_summary(EVENT_ID, cwe_hints=json.dumps([crafted, "CWE-79"]))
++        env = _Env()
++        assert await notify_triage(env, sqlite_d1, EVENT_ID) is True
++        payload = _sent_payload(env)
++        _assert_no_injected_markup(payload)
++        assert "unknown issue" in payload["text"]
++
++    @pytest.mark.asyncio
++    @pytest.mark.parametrize("cwe_hints", ["not json", '{"a": 1}', "null", '"CWE-89"'])
++    async def test_malformed_cwe_hints_still_notifies(self, sqlite_d1, cwe_hints):
++        sqlite_d1.add_event(EVENT_ID)
++        sqlite_d1.add_summary(EVENT_ID, cwe_hints=cwe_hints)
++        env = _Env()
++        assert await notify_triage(env, sqlite_d1, EVENT_ID) is True
++        assert "*CWE*\\nnone" in json.dumps(_sent_payload(env))
++
++    @pytest.mark.asyncio
++    async def test_missing_event_row_still_notifies(self, sqlite_d1):
++        env = _Env()
++        assert await notify_triage(env, sqlite_d1, EVENT_ID) is True
++        assert "unknown issue" in _sent_payload(env)["text"]
++
++    @pytest.mark.asyncio
++    async def test_assessed_severity_is_passed_through(self, sqlite_d1):
++        sqlite_d1.add_event(EVENT_ID)
++        sqlite_d1.add_summary(EVENT_ID, cwe_hints='["CWE-89"]')
++        env = _Env()
++        await notify_triage(env, sqlite_d1, EVENT_ID, assessed_severity="medium")
++        assert "*Severity (assessed)*" in json.dumps(_sent_payload(env))
+ 
+     @pytest.mark.asyncio
+     @pytest.mark.parametrize("webhook", [None, "", MagicMock()])
+-    async def test_skips_without_webhook(self, webhook):
++    async def test_skips_without_webhook(self, sqlite_d1, webhook):
+         env = _Env(webhook=webhook)
+-        assert await notify_triage(env, _make_db(), "evt-1") is False
++        assert await notify_triage(env, sqlite_d1, EVENT_ID) is False
+         env._fetch.assert_not_awaited()
++        assert sqlite_d1.statements == []
+ 
+     @pytest.mark.asyncio
+-    async def test_skips_without_env(self):
+-        assert await notify_triage(None, _make_db(), "evt-1") is False
++    async def test_skips_without_env(self, sqlite_d1):
++        assert await notify_triage(None, sqlite_d1, EVENT_ID) is False
+ 
+     @pytest.mark.asyncio
+-    async def test_fetch_error_is_swallowed(self):
++    async def test_fetch_error_is_swallowed(self, sqlite_d1):
+         env = _Env(fetch_error=RuntimeError("network down"))
+-        assert await notify_triage(env, _make_db(), "evt-1") is False
++        assert await notify_triage(env, sqlite_d1, EVENT_ID) is False
+ 
+     @pytest.mark.asyncio
+-    async def test_non_2xx_returns_false(self):
+-        env = _Env(status=404)
+-        assert await notify_triage(env, _make_db(), "evt-1") is False
+-
+-    @pytest.mark.asyncio
+-    async def test_bad_cwe_json_still_notifies(self):
+-        env = _Env()
+-        db = _make_db()
+-        bad_stmt = MagicMock()
+-        bad_stmt.bind = MagicMock(return_value=bad_stmt)
+-        bad_stmt.first = AsyncMock(return_value={"cwe_hints": "not json"})
+-        original = db.prepare.side_effect
+-        db.prepare.side_effect = lambda sql: bad_stmt if "triage_summaries" in sql else original(sql)
+-
+-        assert await notify_triage(env, db, "evt-1") is True
+-        assert "*CWE*\\nnone" in json.dumps(_sent_payload(env))
++    async def test_non_2xx_returns_false(self, sqlite_d1):
++        assert await notify_triage(_Env(status=404), sqlite_d1, EVENT_ID) is False
+ 
+ 
+ class TestWorkersRuntime:
