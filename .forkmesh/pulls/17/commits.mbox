@@ -1,8 +1,8 @@
 From 628d80f2a76fe4898bd722a2da910bd681a99450 Mon Sep 17 00:00:00 2001
 From: preetan bannenavar <preetansb2006@gmail.com>
 Date: Fri, 23 Oct 2026 23:53:49 +0530
-Subject: [PATCH] Fix accessibility issues for channel pills, preset chips, and
- input labels
+Subject: [PATCH 1/2] Fix accessibility issues for channel pills, preset chips,
+ and input labels
 
 ---
  blt-gitcaster/public/index.html      | 52 +++++++++++++++-------------
@@ -168,3 +168,67 @@ index d167883189..4cf0837049 100644
                  this.currentChannel = pill.dataset.channel;
                  this.render();
              });
+
+From b583d12c732edfd0bae7344283d35d80e234c88c Mon Sep 17 00:00:00 2001
+From: preetan bannenavar <preetansb2006@gmail.com>
+Date: Sat, 24 Oct 2026 18:20:59 +0530
+Subject: [PATCH 2/2] fix: resolve deep nesting and trailing spaces with
+ accessibility updates
+
+---
+ blt-gitcaster/public/sportscaster.js | 25 ++++++++++---------------
+ 1 file changed, 10 insertions(+), 15 deletions(-)
+
+diff --git a/blt-gitcaster/public/sportscaster.js b/blt-gitcaster/public/sportscaster.js
+index 4cf0837049..1667e92bf7 100644
+--- a/blt-gitcaster/public/sportscaster.js
++++ b/blt-gitcaster/public/sportscaster.js
+@@ -945,22 +945,19 @@ class GitHubSportscaster {
+                 }
+             });
+         }
+-
+-       document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
+-            chip.addEventListener('click', () => {
+-                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
+-                    c.classList.remove('active');
+-                    c.setAttribute('aria-pressed', 'false');
+-                });
+-                chip.classList.add('active');
+-                chip.setAttribute('aria-pressed', 'true');
+-                this.eventTypeFilter = chip.dataset.type;
+-            });
++        document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
++        chip.addEventListener('click', () => {
++        document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
++            c.classList.remove('active');
++            c.setAttribute('aria-pressed', 'false');
+         });
+-
++        chip.classList.add('active');
++        chip.setAttribute('aria-pressed', 'true');
++        this.eventTypeFilter = chip.dataset.type;
++        });
++       });
+         document.querySelectorAll('.preset-chips [data-preset]').forEach(chip => {
+             chip.addEventListener('click', () => {
+-                // If these preset chips also toggle pressed states:
+                 document.querySelectorAll('.preset-chips [data-preset]').forEach(c => {
+                     c.classList.remove('active');
+                     c.setAttribute('aria-pressed', 'false');
+@@ -1025,7 +1022,6 @@ class GitHubSportscaster {
+                 if (scopeValueGroup) scopeValueGroup.style.display = 'none';
+                 const githubTokenEl = document.getElementById('github-token');
+                 if (githubTokenEl) githubTokenEl.value = '';
+-                
+                 document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
+                     c.classList.remove('active');
+                     c.setAttribute('aria-pressed', 'false');
+@@ -1035,7 +1031,6 @@ class GitHubSportscaster {
+                     allChip.classList.add('active');
+                     allChip.setAttribute('aria-pressed', 'true');
+                 }
+-                
+                 this.saveConfig();
+                 this.resetData();
+                 this.fetchActivity();
