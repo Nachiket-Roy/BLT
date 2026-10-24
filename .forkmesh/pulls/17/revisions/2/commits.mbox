@@ -1,0 +1,234 @@
+From 628d80f2a76fe4898bd722a2da910bd681a99450 Mon Sep 17 00:00:00 2001
+From: preetan bannenavar <preetansb2006@gmail.com>
+Date: Fri, 23 Oct 2026 23:53:49 +0530
+Subject: [PATCH 1/2] Fix accessibility issues for channel pills, preset chips,
+ and input labels
+
+---
+ blt-gitcaster/public/index.html      | 52 +++++++++++++++-------------
+ blt-gitcaster/public/sportscaster.js | 34 +++++++++++++++---
+ 2 files changed, 57 insertions(+), 29 deletions(-)
+
+diff --git a/blt-gitcaster/public/index.html b/blt-gitcaster/public/index.html
+index e28e021f39..8237f5a9a5 100644
+--- a/blt-gitcaster/public/index.html
++++ b/blt-gitcaster/public/index.html
+@@ -1251,7 +1251,7 @@
+             font-style: italic;
+             word-break: break-word;
+         }
+-    </style>
++   </style>
+     <link rel="stylesheet" href="_brand/blt-dark.css">
+     <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
+ </head>
+@@ -1319,23 +1319,27 @@
+         </div>
+ 
+         <div class="config-group">
+-            <label>Filter by Event Types</label>
+-            <div class="preset-chips" id="event-type-filters">
+-                <span class="preset-chip active" data-type="all"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>All Events</span>
+-                <span class="preset-chip" data-type="PushEvent"><i class="fa-solid fa-upload" aria-hidden="true"></i>Push</span>
+-                <span class="preset-chip" data-type="PullRequestEvent"><i class="fa-solid fa-code-pull-request" aria-hidden="true"></i>PR</span>
+-                <span class="preset-chip" data-type="IssuesEvent"><i class="fa-solid fa-bug" aria-hidden="true"></i>Issues</span>
+-                <span class="preset-chip" data-type="WatchEvent"><i class="fa-solid fa-star" aria-hidden="true"></i>Stars</span>
+-                <span class="preset-chip" data-type="ForkEvent"><i class="fa-solid fa-code-fork" aria-hidden="true"></i>Forks</span>
+-                <span class="preset-chip" data-type="ReleaseEvent"><i class="fa-solid fa-rocket" aria-hidden="true"></i>Release</span>
++            <label id="event-type-label">Filter by Event Types</label>
++            <div class="preset-chips" id="event-type-filters" role="group" aria-labelledby="event-type-label">
++                <button type="button" class="preset-chip active" data-type="all" aria-pressed="true"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>All Events</button>
++                <button type="button" class="preset-chip" data-type="PushEvent" aria-pressed="false"><i class="fa-solid fa-upload" aria-hidden="true"></i>Push</button>
++                <button type="button" class="preset-chip" data-type="PullRequestEvent" aria-pressed="false"><i class="fa-solid fa-code-pull-request" aria-hidden="true"></i>PR</button>
++                <button type="button" class="preset-chip" data-type="IssuesEvent" aria-pressed="false"><i class="fa-solid fa-bug" aria-hidden="true"></i>Issues</button>
++                <button type="button" class="preset-chip" data-type="WatchEvent" aria-pressed="false"><i class="fa-solid fa-star" aria-hidden="true"></i>Stars</button>
++                <button type="button" class="preset-chip" data-type="ForkEvent" aria-pressed="false"><i class="fa-solid fa-code-fork" aria-hidden="true"></i>Forks</button>
++                <button type="button" class="preset-chip" data-type="ReleaseEvent" aria-pressed="false"><i class="fa-solid fa-rocket" aria-hidden="true"></i>Release</button>
+             </div>
+         </div>
+ 
+         <div class="config-group">
+             <label for="ai-api-url">AI Commentary API (OpenAI-compatible)</label>
+             <input type="text" id="ai-api-url" placeholder="https://api.openai.com/v1/chat/completions" value="">
+-            <input type="text" id="ai-api-key" placeholder="API Key (stored locally)" style="margin-top: 8px;">
+-            <select id="ai-model" style="margin-top: 8px;">
++            
++            <label for="ai-api-key" style="margin-top: 8px; display: block;">AI API Key</label>
++            <input type="password" id="ai-api-key" placeholder="API Key (stored locally)" autocomplete="off" style="margin-top: 4px;">
++            
++            <label for="ai-model" style="margin-top: 8px; display: block;">AI Model</label>
++            <select id="ai-model" style="margin-top: 4px;">
+                 <option value="gpt-4o-mini">gpt-4o-mini</option>
+                 <option value="gpt-4o">gpt-4o</option>
+                 <option value="o3-mini">o3-mini</option>
+@@ -1352,12 +1356,12 @@
+         </div>
+ 
+         <div class="config-group">
+-            <label>Preset Channels</label>
+-            <div class="preset-chips">
+-                <span class="preset-chip" data-preset="trending"><i class="fa-solid fa-fire" aria-hidden="true"></i>Trending</span>
+-                <span class="preset-chip" data-preset="web"><i class="fa-solid fa-globe" aria-hidden="true"></i>Web Dev</span>
+-                <span class="preset-chip" data-preset="ai"><i class="fa-solid fa-brain" aria-hidden="true"></i>AI/ML</span>
+-                <span class="preset-chip" data-preset="devops"><i class="fa-solid fa-gears" aria-hidden="true"></i>DevOps</span>
++            <label id="preset-channels-label">Preset Channels</label>
++            <div class="preset-chips" role="group" aria-labelledby="preset-channels-label">
++                <button type="button" class="preset-chip" data-preset="trending" aria-pressed="false"><i class="fa-solid fa-fire" aria-hidden="true"></i>Trending</button>
++                <button type="button" class="preset-chip" data-preset="web" aria-pressed="false"><i class="fa-solid fa-globe" aria-hidden="true"></i>Web Dev</button>
++                <button type="button" class="preset-chip" data-preset="ai" aria-pressed="false"><i class="fa-solid fa-brain" aria-hidden="true"></i>AI/ML</button>
++                <button type="button" class="preset-chip" data-preset="devops" aria-pressed="false"><i class="fa-solid fa-gears" aria-hidden="true"></i>DevOps</button>
+             </div>
+         </div>
+ 
+@@ -1396,12 +1400,12 @@
+             </div>
+ 
+             <!-- Channel Filters -->
+-            <div class="channel-filters" id="channel-filters">
+-                <span class="channel-filters-label"><i class="fa-solid fa-tv" aria-hidden="true"></i> Channels</span>
+-                <span class="channel-pill active" data-channel="all"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>All Activity <span class="count" id="all-count">0</span></span>
+-                <span class="channel-pill" data-channel="hot"><i class="fa-solid fa-fire" aria-hidden="true"></i>Hot <span class="count" id="hot-count">0</span></span>
+-                <span class="channel-pill" data-channel="code"><i class="fa-solid fa-code" aria-hidden="true"></i>Code <span class="count" id="code-count">0</span></span>
+-                <span class="channel-pill" data-channel="social"><i class="fa-solid fa-users" aria-hidden="true"></i>Social <span class="count" id="social-count">0</span></span>
++            <div class="channel-filters" id="channel-filters" role="group" aria-labelledby="channel-filters-label">
++                <span id="channel-filters-label" class="channel-filters-label"><i class="fa-solid fa-tv" aria-hidden="true"></i> Channels</span>
++                <button type="button" class="channel-pill active" data-channel="all" aria-pressed="true"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>All Activity <span class="count" id="all-count">0</span></button>
++                <button type="button" class="channel-pill" data-channel="hot" aria-pressed="false"><i class="fa-solid fa-fire" aria-hidden="true"></i>Hot <span class="count" id="hot-count">0</span></button>
++                <button type="button" class="channel-pill" data-channel="code" aria-pressed="false"><i class="fa-solid fa-code" aria-hidden="true"></i>Code <span class="count" id="code-count">0</span></button>
++                <button type="button" class="channel-pill" data-channel="social" aria-pressed="false"><i class="fa-solid fa-users" aria-hidden="true"></i>Social <span class="count" id="social-count">0</span></button>
+             </div>
+ 
+             <!-- Sportscaster Announcement Section -->
+diff --git a/blt-gitcaster/public/sportscaster.js b/blt-gitcaster/public/sportscaster.js
+index d167883189..4cf0837049 100644
+--- a/blt-gitcaster/public/sportscaster.js
++++ b/blt-gitcaster/public/sportscaster.js
+@@ -946,16 +946,28 @@ class GitHubSportscaster {
+             });
+         }
+ 
+-        document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
++       document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
+             chip.addEventListener('click', () => {
+-                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => c.classList.remove('active'));
++                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
++                    c.classList.remove('active');
++                    c.setAttribute('aria-pressed', 'false');
++                });
+                 chip.classList.add('active');
++                chip.setAttribute('aria-pressed', 'true');
+                 this.eventTypeFilter = chip.dataset.type;
+             });
+         });
+ 
+         document.querySelectorAll('.preset-chips [data-preset]').forEach(chip => {
+             chip.addEventListener('click', () => {
++                // If these preset chips also toggle pressed states:
++                document.querySelectorAll('.preset-chips [data-preset]').forEach(c => {
++                    c.classList.remove('active');
++                    c.setAttribute('aria-pressed', 'false');
++                });
++                chip.classList.add('active');
++                chip.setAttribute('aria-pressed', 'true');
++
+                 const preset = chip.dataset.preset;
+                 const presetData = GitHubSportscaster.PRESET_CHANNELS[preset];
+                 if (presetData && presetData.orgs.length > 0 && scopeType && scopeValueGroup) {
+@@ -1013,9 +1025,17 @@ class GitHubSportscaster {
+                 if (scopeValueGroup) scopeValueGroup.style.display = 'none';
+                 const githubTokenEl = document.getElementById('github-token');
+                 if (githubTokenEl) githubTokenEl.value = '';
+-                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => c.classList.remove('active'));
++                
++                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
++                    c.classList.remove('active');
++                    c.setAttribute('aria-pressed', 'false');
++                });
+                 const allChip = document.querySelector('#event-type-filters .preset-chip[data-type="all"]');
+-                if (allChip) allChip.classList.add('active');
++                if (allChip) {
++                    allChip.classList.add('active');
++                    allChip.setAttribute('aria-pressed', 'true');
++                }
++                
+                 this.saveConfig();
+                 this.resetData();
+                 this.fetchActivity();
+@@ -1046,8 +1066,12 @@ class GitHubSportscaster {
+     setupChannelFilters() {
+         document.querySelectorAll('.channel-pill').forEach(pill => {
+             pill.addEventListener('click', () => {
+-                document.querySelectorAll('.channel-pill').forEach(p => p.classList.remove('active'));
++                document.querySelectorAll('.channel-pill').forEach(p => {
++                    p.classList.remove('active');
++                    p.setAttribute('aria-pressed', 'false');
++                });
+                 pill.classList.add('active');
++                pill.setAttribute('aria-pressed', 'true');
+                 this.currentChannel = pill.dataset.channel;
+                 this.render();
+             });
+
+From b583d12c732edfd0bae7344283d35d80e234c88c Mon Sep 17 00:00:00 2001
+From: preetan bannenavar <preetansb2006@gmail.com>
+Date: Sat, 24 Oct 2026 18:20:59 +0530
+Subject: [PATCH 2/2] fix: resolve deep nesting and trailing spaces with
+ accessibility updates
+
+---
+ blt-gitcaster/public/sportscaster.js | 25 ++++++++++---------------
+ 1 file changed, 10 insertions(+), 15 deletions(-)
+
+diff --git a/blt-gitcaster/public/sportscaster.js b/blt-gitcaster/public/sportscaster.js
+index 4cf0837049..1667e92bf7 100644
+--- a/blt-gitcaster/public/sportscaster.js
++++ b/blt-gitcaster/public/sportscaster.js
+@@ -945,22 +945,19 @@ class GitHubSportscaster {
+                 }
+             });
+         }
+-
+-       document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
+-            chip.addEventListener('click', () => {
+-                document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
+-                    c.classList.remove('active');
+-                    c.setAttribute('aria-pressed', 'false');
+-                });
+-                chip.classList.add('active');
+-                chip.setAttribute('aria-pressed', 'true');
+-                this.eventTypeFilter = chip.dataset.type;
+-            });
++        document.querySelectorAll('#event-type-filters .preset-chip').forEach(chip => {
++        chip.addEventListener('click', () => {
++        document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
++            c.classList.remove('active');
++            c.setAttribute('aria-pressed', 'false');
+         });
+-
++        chip.classList.add('active');
++        chip.setAttribute('aria-pressed', 'true');
++        this.eventTypeFilter = chip.dataset.type;
++        });
++       });
+         document.querySelectorAll('.preset-chips [data-preset]').forEach(chip => {
+             chip.addEventListener('click', () => {
+-                // If these preset chips also toggle pressed states:
+                 document.querySelectorAll('.preset-chips [data-preset]').forEach(c => {
+                     c.classList.remove('active');
+                     c.setAttribute('aria-pressed', 'false');
+@@ -1025,7 +1022,6 @@ class GitHubSportscaster {
+                 if (scopeValueGroup) scopeValueGroup.style.display = 'none';
+                 const githubTokenEl = document.getElementById('github-token');
+                 if (githubTokenEl) githubTokenEl.value = '';
+-                
+                 document.querySelectorAll('#event-type-filters .preset-chip').forEach(c => {
+                     c.classList.remove('active');
+                     c.setAttribute('aria-pressed', 'false');
+@@ -1035,7 +1031,6 @@ class GitHubSportscaster {
+                     allChip.classList.add('active');
+                     allChip.setAttribute('aria-pressed', 'true');
+                 }
+-                
+                 this.saveConfig();
+                 this.resetData();
+                 this.fetchActivity();
