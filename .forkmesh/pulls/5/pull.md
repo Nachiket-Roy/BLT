@@ -5,16 +5,16 @@ title: Fix mobile sidebar: add toggle button, outside-click close, auto-close on
 base: main
 head: navodit:blt-newsletter/fix-mobile-sidebar-nav
 status: open
-ts: 1792851896
+ts: 1792853820
 author: FTSqIIVcAz6yrEUfHk8wm1rr_FLa2bBVWJKeRKZCwcQ
 authorName: navodit
-sig: R8HJTzXhA1nXI7buUJhpX9xp8JA3oDkNamzmNXgr7VvFpKxTGvvT2s4j9NbG-IkMVPRKb2pVf2OXJXfRtnfHCQ
+sig: e5R_jpcnECOEeEXPo_uDJzugPK6LyOjO1nBbPl5bYlFBoDjkFWakPb2S3TM68fyD7Qeq462CCdFGPFgXRf5-Dw
 aiModel: Claude Sonnet 5
-headBaseOid: a8e09d5480a36498976b4b3676529bd97f398187
-headOid: ee2e7a737cf0068262c4ef72fc515f75f639ec57
-revision: 5
-creationBaseOid: a8e09d5480a36498976b4b3676529bd97f398187
-creationHeadOid: 871d03e46843452bc4ac73024f22dbd5c71569a7
+headBaseOid: ecc1b2f7a9d91a5a31fae2181e26fbaefeb07a12
+headOid: 9ae167a46ec6ba4526a7479cbe352e0e99d10639
+revision: 6
+creationBaseOid: ecc1b2f7a9d91a5a31fae2181e26fbaefeb07a12
+creationHeadOid: d39571ab5f3869e70fce370509172779bdc6e828
 ---
 
 Fixes #26
