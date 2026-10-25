@@ -1,0 +1,291 @@
+From d12584a032f9de55719d23e9e84fdb33c5711d0c Mon Sep 17 00:00:00 2001
+From: preetan bannenavar <preetansb2006@gmail.com>
+Date: Sun, 25 Oct 2026 17:39:50 +0530
+Subject: [PATCH] test(blt-vanish): add worker unit tests
+
+---
+ blt-vanish/cloudflare_workers/src/brokers.py  |  2 +-
+ .../cloudflare_workers/tests/conftest.py      | 49 +++++++++++++
+ .../tests/test_broker_data.py                 | 14 ++++
+ .../cloudflare_workers/tests/test_brokers.py  | 29 ++++++++
+ .../cloudflare_workers/tests/test_index.py    | 68 +++++++++++++++++++
+ .../tests/test_middleware.py                  | 55 +++++++++++++++
+ scripts/ci/tests.tsv                          |  2 +-
+ 7 files changed, 217 insertions(+), 2 deletions(-)
+ create mode 100644 blt-vanish/cloudflare_workers/tests/conftest.py
+ create mode 100644 blt-vanish/cloudflare_workers/tests/test_broker_data.py
+ create mode 100644 blt-vanish/cloudflare_workers/tests/test_brokers.py
+ create mode 100644 blt-vanish/cloudflare_workers/tests/test_index.py
+ create mode 100644 blt-vanish/cloudflare_workers/tests/test_middleware.py
+
+diff --git a/blt-vanish/cloudflare_workers/src/brokers.py b/blt-vanish/cloudflare_workers/src/brokers.py
+index 57249294b9..b6da00b5aa 100644
+--- a/blt-vanish/cloudflare_workers/src/brokers.py
++++ b/blt-vanish/cloudflare_workers/src/brokers.py
+@@ -16,7 +16,7 @@ BROKERS = [
+             "steps": [
+                 "Visit the opt-out page",
+                 "Search for your listing",
+-                'Click "Remove this listing"',
++                "Click 'Remove this listing'",
+                 "Enter your email for confirmation",
+                 "Verify via email link",
+             ],
+diff --git a/blt-vanish/cloudflare_workers/tests/conftest.py b/blt-vanish/cloudflare_workers/tests/conftest.py
+new file mode 100644
+index 0000000000..4722b4f2d9
+--- /dev/null
++++ b/blt-vanish/cloudflare_workers/tests/conftest.py
+@@ -0,0 +1,49 @@
++﻿import sys
++import types
++from pathlib import Path
++
++import pytest
++
++
++SRC_DIR = Path(__file__).resolve().parents[1] / "src"
++sys.path.insert(0, str(SRC_DIR))
++
++
++class FakeResponse:
++    def __init__(self, body="", status=200, headers=None):
++        self.body = body
++        self.text = body
++        self.status = status
++        self.headers = dict(headers or {})
++
++
++class FakeWorkerEntrypoint:
++    pass
++
++
++class FakeAbortSignal:
++    @staticmethod
++    def timeout(_milliseconds):
++        return None
++
++
++async def fake_fetch(*_args, **_kwargs):
++    return FakeResponse(status=202)
++
++
++workers = types.ModuleType("workers")
++workers.Response = FakeResponse
++workers.WorkerEntrypoint = FakeWorkerEntrypoint
++workers.fetch = fake_fetch
++sys.modules["workers"] = workers
++
++js = types.ModuleType("js")
++js.AbortSignal = FakeAbortSignal
++sys.modules["js"] = js
++
++
++@pytest.fixture(autouse=True)
++def reset_rate_limits():
++    import middleware
++
++    middleware._ip_requests.clear()
+diff --git a/blt-vanish/cloudflare_workers/tests/test_broker_data.py b/blt-vanish/cloudflare_workers/tests/test_broker_data.py
+new file mode 100644
+index 0000000000..586ed10f53
+--- /dev/null
++++ b/blt-vanish/cloudflare_workers/tests/test_broker_data.py
+@@ -0,0 +1,14 @@
++﻿import json
++from pathlib import Path
++
++from brokers import BROKERS
++
++
++def test_brokers_match_json_data():
++    project_root = Path(__file__).resolve().parents[2]
++    data_path = project_root / "data" / "brokers" / "brokers.json"
++
++    with data_path.open(encoding="utf-8") as data_file:
++        source_brokers = json.load(data_file)
++
++    assert BROKERS == source_brokers
+diff --git a/blt-vanish/cloudflare_workers/tests/test_brokers.py b/blt-vanish/cloudflare_workers/tests/test_brokers.py
+new file mode 100644
+index 0000000000..00815ba694
+--- /dev/null
++++ b/blt-vanish/cloudflare_workers/tests/test_brokers.py
+@@ -0,0 +1,29 @@
++﻿import json
++
++from brokers import BROKERS, handle_brokers_request
++
++
++def response_json(response):
++    return json.loads(response.text)
++
++
++def test_broker_list_returns_all_brokers():
++    response = handle_brokers_request("/api/brokers")
++
++    assert response.status == 200
++    assert response_json(response) == BROKERS
++
++
++def test_broker_detail_returns_matching_broker():
++    response = handle_brokers_request("/api/brokers/whitepages")
++
++    assert response.status == 200
++    assert response_json(response)["id"] == "whitepages"
++    assert response_json(response)["name"] == "Whitepages"
++
++
++def test_unknown_broker_returns_404():
++    response = handle_brokers_request("/api/brokers/not-a-real-broker")
++
++    assert response.status == 404
++    assert response_json(response) == {"error": "Broker not found"}
+diff --git a/blt-vanish/cloudflare_workers/tests/test_index.py b/blt-vanish/cloudflare_workers/tests/test_index.py
+new file mode 100644
+index 0000000000..9f68586fb7
+--- /dev/null
++++ b/blt-vanish/cloudflare_workers/tests/test_index.py
+@@ -0,0 +1,68 @@
++﻿import asyncio
++import json
++
++from index import Default
++import middleware
++
++
++class Request:
++    def __init__(self, method, path, headers=None):
++        self.method = method
++        self.url = f"https://example.test{path}"
++        self.headers = headers or {}
++
++
++def fetch(method, path, headers=None):
++    return asyncio.run(Default().fetch(Request(method, path, headers)))
++
++
++def test_broker_list_route():
++    response = fetch("GET", "/api/brokers")
++
++    assert response.status == 200
++    assert len(json.loads(response.text)) > 0
++
++
++def test_broker_detail_route():
++    response = fetch("GET", "/api/brokers/whitepages")
++
++    assert response.status == 200
++    assert json.loads(response.text)["id"] == "whitepages"
++
++
++def test_unknown_broker_route_returns_404():
++    response = fetch("GET", "/api/brokers/unknown-broker")
++
++    assert response.status == 404
++
++
++def test_options_request_bypasses_rate_limit():
++    middleware._ip_requests["192.0.2.10"] = [
++        100.0
++    ] * middleware.MAX_REQUESTS_PER_WINDOW
++
++    response = fetch(
++        "OPTIONS",
++        "/api/brokers",
++        {"cf-connecting-ip": "192.0.2.10"},
++    )
++
++    assert response.status == 200
++    assert response.headers["Access-Control-Allow-Methods"] == "GET, OPTIONS"
++
++
++def test_unknown_path_returns_404():
++    response = fetch("GET", "/not-a-real-route")
++
++    assert response.status == 404
++    assert response.text == "Not Found"
++
++
++def test_alert_route_rejects_wrong_content_type():
++    response = fetch(
++        "POST",
++        "/api/alerts",
++        {"cf-connecting-ip": "192.0.2.11", "content-type": "text/plain"},
++    )
++
++    assert response.status == 400
+diff --git a/blt-vanish/cloudflare_workers/tests/test_middleware.py b/blt-vanish/cloudflare_workers/tests/test_middleware.py
+new file mode 100644
+index 0000000000..4d86e9bfa8
+--- /dev/null
++++ b/blt-vanish/cloudflare_workers/tests/test_middleware.py
+@@ -0,0 +1,55 @@
++﻿import middleware
++
++
++class Request:
++    def __init__(self, headers=None, method="GET"):
++        self.headers = headers or {}
++        self.method = method
++
++
++def test_rate_limit_allows_first_100_requests():
++    request = Request({"cf-connecting-ip": "192.0.2.1"})
++
++    for _ in range(middleware.MAX_REQUESTS_PER_WINDOW):
++        assert middleware.rate_limit_middleware(request) is None
++
++
++def test_rate_limit_rejects_request_101():
++    request = Request({"cf-connecting-ip": "192.0.2.2"})
++
++    for _ in range(middleware.MAX_REQUESTS_PER_WINDOW):
++        assert middleware.rate_limit_middleware(request) is None
++
++    response = middleware.rate_limit_middleware(request)
++
++    assert response.status == 429
++    assert "Too Many Requests" in response.text
++    assert response.headers["Access-Control-Allow-Origin"] == "*"
++
++
++def test_rate_limit_uses_forwarded_ip_when_cf_ip_missing():
++    request = Request({"x-forwarded-for": "192.0.2.3"})
++
++    assert middleware.rate_limit_middleware(request) is None
++    assert "192.0.2.3" in middleware._ip_requests
++
++
++def test_alert_post_requires_json_content_type():
++    request = Request({"content-type": "text/plain"}, method="POST")
++
++    response = middleware.alert_routing_middleware(request, "/api/alerts")
++
++    assert response.status == 400
++    assert "Invalid Content-Type" in response.text
++
++
++def test_alert_put_accepts_json_content_type():
++    request = Request({"content-type": "application/json"}, method="PUT")
++
++    assert middleware.alert_routing_middleware(request, "/api/alerts") is None
++
++
++def test_non_alert_post_does_not_require_json_content_type():
++    request = Request({"content-type": "text/plain"}, method="POST")
++
++    assert middleware.alert_routing_middleware(request, "/api/brokers") is None
+diff --git a/scripts/ci/tests.tsv b/scripts/ci/tests.tsv
+index c95ebc797e..a9414c61ce 100644
+--- a/scripts/ci/tests.tsv
++++ b/scripts/ci/tests.tsv
+@@ -41,7 +41,7 @@ blt-timer	python	pip install pytest && python -m pytest tests/ -q
+ blt-toasty	python	pip install --group dev && python -m pytest -q
+ blt-tomato	node	python3 -m py_compile .github/scripts/funding/owasp_funding_yml_scraper.py && python3 -m unittest discover -s test -p 'test_*.py' && node --test 'test/*.test.mjs'
+ blt-university	node	npm_install && npm test
+-blt-vanish	python	cd cloudflare_workers && python -m compileall -q src
++blt-vanish	python	cd cloudflare_workers && pip install -r requirements-dev.txt && python -m pytest -q && python -m compileall -q src
+ blt-waypoint	python	python -m unittest discover -s tests -p 'test_*.py' && node --test 'tests/*.test.mjs'
+ blt-zero	python	pip install pytest==8.3.3 pytest-asyncio==0.24.0 cryptography==46.0.5 && PYTHONPATH=. python -m pytest tests/ -q
+ my-gsoc-tool	node	npm test
