@@ -1,7 +1,7 @@
 From 51ac4f7efbf2431a465a343aa06ac3be17a5c97f Mon Sep 17 00:00:00 2001
 From: Salava-marquina <naman.gdsc2@gmail.com>
 Date: Sun, 25 Oct 2026 14:29:35 +0530
-Subject: [PATCH] blt-netguardian: add unit tests for payload_redact
+Subject: [PATCH 1/2] blt-netguardian: add unit tests for payload_redact
 
 payload_redact.py hides secrets in finding snippets shown by the API and PDF reports, but had no tests. Cover top-level keys, case-insensitivity, nested dicts, lists of dicts, non-dict pass-through and input immutability. Record access_token and api-key as strict xfail tests, since only exact key names are redacted today. Behaviour is unchanged.
 
@@ -70,3 +70,51 @@ index 0000000000..7b8ee0c537
 +def test_hyphenated_api_key_is_redacted():
 +    assert redact_payload({"api-key": "k"}) == {"api-key": "[REDACTED]"}
 \ No newline at end of file
+
+From 1b1c5b3395bc25eb9ee1084986d972cc121c77eb Mon Sep 17 00:00:00 2001
+From: Salava-marquina <naman.gdsc2@gmail.com>
+Date: Sun, 25 Oct 2026 15:55:34 +0530
+Subject: [PATCH 2/2] blt-netguardian: cover mixed nested and empty collections
+ in payload_redact tests
+
+Address review on #20: add tests for mixed nested collections, a sensitive key holding a list, and empty collections, and add the missing trailing newline.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ blt-netguardian/tests/test_payload_redact.py | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/blt-netguardian/tests/test_payload_redact.py b/blt-netguardian/tests/test_payload_redact.py
+index 7b8ee0c537..dbf35c0459 100644
+--- a/blt-netguardian/tests/test_payload_redact.py
++++ b/blt-netguardian/tests/test_payload_redact.py
+@@ -39,6 +39,22 @@ def test_does_not_modify_input():
+     assert payload == {"password": "hunter2"}
+ 
+ 
++def test_redacts_in_mixed_nested_collections():
++    payload = {"groups": [[{"secret": "s"}], {"inner": [{"token": "t"}]}, "plain", 3]}
++    assert redact_payload(payload) == {
++        "groups": [[{"secret": "[REDACTED]"}], {"inner": [{"token": "[REDACTED]"}]}, "plain", 3]
++    }
++
++
++def test_sensitive_key_with_list_value_is_redacted_whole():
++    assert redact_payload({"token": ["a", "b"]}) == {"token": "[REDACTED]"}
++
++
++@pytest.mark.parametrize("payload", [{}, {"items": []}, {"auth": {}}])
++def test_empty_collections_are_unchanged(payload):
++    assert redact_payload(payload) == payload
++
++
+ # Only exact key names are matched, so these variants currently leak.
+ @pytest.mark.xfail(reason="access_token is not an exact match for 'token'", strict=True)
+ def test_access_token_is_redacted():
+@@ -47,4 +63,4 @@ def test_access_token_is_redacted():
+ 
+ @pytest.mark.xfail(reason="api-key uses a hyphen; REDACT_KEYS has api_key", strict=True)
+ def test_hyphenated_api_key_is_redacted():
+-    assert redact_payload({"api-key": "k"}) == {"api-key": "[REDACTED]"}
+\ No newline at end of file
++    assert redact_payload({"api-key": "k"}) == {"api-key": "[REDACTED]"}

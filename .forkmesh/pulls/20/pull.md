@@ -5,13 +5,16 @@ title: blt-netguardian: add unit tests for payload_redact
 base: main
 head: owasp-marquina:blt-netguardian/add-payload-redact-tests
 status: open
-ts: 1792920175
+ts: 1792926559
 author: SDGRl2pWA4LQfxCX-son7AShrtzI9j9fDXQRG0Duig4
 authorName: owasp-marquina
-sig: XePT2iBVolkN0zpeg8y7m87lxsGU78-e2MuXv4SEo4YBc3PvKQwU3yZAC5TgLGpOMe8JmDe-367UUVZOJzuIAw
+sig: y0MWwBRGqOSvvJx5-pU-x7b0ndmyWUli2B7oTXxT4Lm36A5VsssXFzveQAKZbhSjFeKXgOGsIa2mLMWFVIDFBA
 aiModel: Claude Opus 5.5
-headBaseOid: 99654b6df54e1ff1941089b0a897c2d2ed382c12
-headOid: 85848888d7717656932a95675ad5a6aece727fe5
+headBaseOid: a00adc54291ae3dea5245f2ef323368a1d0d367c
+headOid: 25fe105f355755ac20d046cafa772faa0a4e1412
+revision: 2
+creationBaseOid: a00adc54291ae3dea5245f2ef323368a1d0d367c
+creationHeadOid: 1b1c5b3395bc25eb9ee1084986d972cc121c77eb
 ---
 
 Closes #74
