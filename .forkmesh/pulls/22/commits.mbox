@@ -1,0 +1,34 @@
+From a73c2ac3049743d7f2bdf3ee97b7b717c7d1d24a Mon Sep 17 00:00:00 2001
+From: hrinkar01 <hrinkar16@gmail.com>
+Date: Sun, 25 Oct 2026 21:16:29 +0530
+Subject: [PATCH] docs: exclude superpowers from build and update repo metadata
+
+---
+ blt-docs/mkdocs.yml | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/blt-docs/mkdocs.yml b/blt-docs/mkdocs.yml
+index 9591c443c3..deacf35860 100644
+--- a/blt-docs/mkdocs.yml
++++ b/blt-docs/mkdocs.yml
+@@ -3,8 +3,10 @@ site_url: https://docs.owaspblt.org/
+ site_description: Official documentation for OWASP Bug Logging Tool (BLT)
+ site_author: OWASP BLT Team
+ repo_url: https://git.owaspblt.org/BLT/BLT-Docs
+-repo_name: owasp-blt/blt-docs
++repo_name: BLT/blt-docs
+ edit_uri: ""
++exclude_docs: |
++  superpowers/
+ 
+ theme:
+   name: material
+@@ -115,7 +117,7 @@ extra:
+       name: BLT Website
+   generator: false
+ 
+-copyright: Copyright &copy; 2024 OWASP Foundation
++copyright: Copyright &copy; 2026 OWASP Foundation
+ 
+ nav:
+   - Home: index.md
