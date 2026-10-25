@@ -1,0 +1,74 @@
+diff --git a/blt-leaf/src/utils.py b/blt-leaf/src/utils.py
+index 9295747348..9de53c2124 100644
+--- a/blt-leaf/src/utils.py
++++ b/blt-leaf/src/utils.py
+@@ -103,6 +103,10 @@ def calculate_review_status(reviews_data):
+             # Safely access user field - can be null for deleted accounts
+             user = review.get('user')
+             if user and user.get('login'):
++                # A comment-only review doesn't change the reviewer's approval
++                # or change-request state, so it must not overwrite it.
++                if review.get('state') == 'COMMENTED':
++                    continue
+                 latest_reviews[user['login']] = review['state']
+ 
+         # Determine overall status: changes_requested takes precedence over approved
+diff --git a/blt-leaf/tests/test_review_status.py b/blt-leaf/tests/test_review_status.py
+new file mode 100644
+index 0000000000..f7c394d09d
+--- /dev/null
++++ b/blt-leaf/tests/test_review_status.py
+@@ -0,0 +1,53 @@
++"""Regression tests for GitHub pull request review status."""
++
++import pathlib
++import sys
++import unittest
++
++SRC = pathlib.Path(__file__).resolve().parent.parent / "src"
++sys.path.insert(0, str(SRC))
++
++from utils import calculate_review_status
++
++
++def review(login, state, submitted_at):
++    return {
++        "user": {"login": login},
++        "state": state,
++        "submitted_at": submitted_at,
++    }
++
++
++class CalculateReviewStatusTests(unittest.TestCase):
++    def test_comment_after_approval_preserves_approval(self):
++        reviews = [
++            review("alice", "APPROVED", "2026-10-24T10:00:00Z"),
++            review("alice", "COMMENTED", "2026-10-24T11:00:00Z"),
++        ]
++        self.assertEqual(calculate_review_status(reviews), "approved")
++
++    def test_comment_after_changes_requested_preserves_request(self):
++        reviews = [
++            review("alice", "CHANGES_REQUESTED", "2026-10-24T10:00:00Z"),
++            review("alice", "COMMENTED", "2026-10-24T11:00:00Z"),
++        ]
++        self.assertEqual(calculate_review_status(reviews), "changes_requested")
++
++    def test_comment_does_not_erase_changes_requested_over_other_approval(self):
++        reviews = [
++            review("alice", "CHANGES_REQUESTED", "2026-10-24T10:00:00Z"),
++            review("bob", "APPROVED", "2026-10-24T10:30:00Z"),
++            review("alice", "COMMENTED", "2026-10-24T11:00:00Z"),
++        ]
++        self.assertEqual(calculate_review_status(reviews), "changes_requested")
++
++    def test_dismissed_changes_request_is_cleared(self):
++        reviews = [
++            review("alice", "CHANGES_REQUESTED", "2026-10-24T10:00:00Z"),
++            review("alice", "DISMISSED", "2026-10-24T11:00:00Z"),
++        ]
++        self.assertEqual(calculate_review_status(reviews), "pending")
++
++
++if __name__ == "__main__":
++    unittest.main()
