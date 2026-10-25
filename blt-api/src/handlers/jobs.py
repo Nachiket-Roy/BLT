@@ -1,7 +1,7 @@
 """User-owned jobs API handlers."""
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from libs.api_key import require_scope, SCOPE_WRITE_JOBS
 from libs.db import get_db_safe
@@ -95,7 +95,7 @@ async def handle_jobs(
     """Handle user-owned jobs routes under /v2/jobs."""
     method = str(request.method).upper()
     user_id = get_request_user_id(request)
-    if user_id is None:
+    if method in ("POST", "PATCH") and user_id is None:
         return error_response("User API key required", status=401)
 
     try:
@@ -132,7 +132,10 @@ async def handle_jobs(
             return error_response("Method Not Allowed", status=405, headers={"Allow": "GET, POST, PATCH"})
 
         page, per_page = parse_pagination_params(query_params)
-        queryset = Job.objects(db).filter(created_by_user_id=user_id)
+        if user_id is not None:
+            queryset = Job.objects(db).filter(created_by_user_id=user_id)
+        else:
+            queryset = Job.objects(db).filter(is_active=1)
         status = query_params.get("status", "").strip()
         if status:
             if status not in _JOB_STATUSES:
@@ -150,20 +153,29 @@ async def handle_jobs(
         return error_response("An internal error occurred", status=500)
 
 
-async def _job_detail_or_update(db: Any, request: Any, method: str, job_id_str: str, user_id: int) -> Any:
+async def _job_detail_or_update(db: Any, request: Any, method: str, job_id_str: str, user_id: Optional[int]) -> Any:
     if not job_id_str.isdigit():
         return error_response("Invalid job ID", status=400)
     job_id = int(job_id_str)
 
-    job = await Job.objects(db).get(id=job_id, created_by_user_id=user_id)
-    if not job:
-        return error_response("Job not found", status=404)
-
     if method == "GET":
+        if user_id is not None:
+            job = await Job.objects(db).get(id=job_id, created_by_user_id=user_id)
+        else:
+            job = await Job.objects(db).get(id=job_id, is_active=1)
+        if not job:
+            return error_response("Job not found", status=404)
         return json_response({"success": True, "data": job})
+
+    if user_id is None:
+        return error_response("User API key required", status=401)
 
     if method != "PATCH":
         return error_response("Method Not Allowed", status=405, headers={"Allow": "GET, PATCH"})
+
+    job = await Job.objects(db).get(id=job_id, created_by_user_id=user_id)
+    if not job:
+        return error_response("Job not found", status=404)
 
     err = require_scope(request, SCOPE_WRITE_JOBS)
     if err:
@@ -182,7 +194,7 @@ async def _job_detail_or_update(db: Any, request: Any, method: str, job_id_str: 
     return json_response({"success": True, "message": "Job updated successfully", "data": updated})
 
 
-async def _view_job(db: Any, job_id_str: str, user_id: int) -> Any:
+async def _view_job(db: Any, job_id_str: str, user_id: Optional[int]) -> Any:
     if not job_id_str.isdigit():
         return error_response("Invalid job ID", status=400)
     job_id = int(job_id_str)
@@ -196,11 +208,17 @@ async def _view_job(db: Any, job_id_str: str, user_id: int) -> Any:
     return json_response({"success": True, "message": "Job view recorded", "data": {"id": job_id, "views": views}})
 
 
-async def _job_stats(db: Any, user_id: int) -> Any:
-    total = await Job.objects(db).filter(created_by_user_id=user_id).count()
-    active = await Job.objects(db).filter(created_by_user_id=user_id, is_active=1).count()
-    open_jobs = await Job.objects(db).filter(created_by_user_id=user_id, status="open").count()
-    closed = await Job.objects(db).filter(created_by_user_id=user_id, status="closed").count()
+async def _job_stats(db: Any, user_id: Optional[int]) -> Any:
+    if user_id is not None:
+        total = await Job.objects(db).filter(created_by_user_id=user_id).count()
+        active = await Job.objects(db).filter(created_by_user_id=user_id, is_active=1).count()
+        open_jobs = await Job.objects(db).filter(created_by_user_id=user_id, status="open").count()
+        closed = await Job.objects(db).filter(created_by_user_id=user_id, status="closed").count()
+    else:
+        total = await Job.objects(db).count()
+        active = await Job.objects(db).filter(is_active=1).count()
+        open_jobs = await Job.objects(db).filter(status="open").count()
+        closed = await Job.objects(db).filter(status="closed").count()
     return json_response({
         "success": True,
         "data": {

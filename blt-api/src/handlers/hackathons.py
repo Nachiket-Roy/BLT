@@ -145,7 +145,7 @@ async def handle_hackathons(
     """Handle user-owned hackathon routes under /v2/hackathons."""
     method = str(request.method).upper()
     user_id = get_request_user_id(request)
-    if user_id is None:
+    if method in ("POST", "PATCH") and user_id is None:
         return error_response("User API key required", status=401)
 
     try:
@@ -179,7 +179,10 @@ async def handle_hackathons(
             return error_response("Method Not Allowed", status=405, headers={"Allow": "GET, POST, PATCH"})
 
         page, per_page = parse_pagination_params(query_params)
-        queryset = Hackathon.objects(db).filter(created_by_user_id=user_id)
+        if user_id is not None:
+            queryset = Hackathon.objects(db).filter(created_by_user_id=user_id)
+        else:
+            queryset = Hackathon.objects(db).filter(is_published=1)
         total = await queryset.count()
         rows = await queryset.order_by("-starts_at").paginate(page, per_page).all()
         return paginated_response([_with_status(row) for row in rows], page=page, per_page=per_page, total=total)
@@ -192,8 +195,11 @@ async def handle_hackathons(
         return error_response("An internal error occurred", status=500)
 
 
-async def _get_hackathon(db: Any, slug: str, user_id: int) -> Any:
-    hackathon = await Hackathon.objects(db).get(slug=slug, created_by_user_id=user_id)
+async def _get_hackathon(db: Any, slug: str, user_id: Optional[int] = None) -> Any:
+    if user_id is not None:
+        hackathon = await Hackathon.objects(db).get(slug=slug, created_by_user_id=user_id)
+    else:
+        hackathon = await Hackathon.objects(db).get(slug=slug, is_published=1)
     if not hackathon:
         return error_response("Hackathon not found", status=404)
     registration_count = await HackathonRegistration.objects(db).filter(

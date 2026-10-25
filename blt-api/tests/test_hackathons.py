@@ -45,20 +45,34 @@ def _queryset(rows=None, row=None, count=0):
 
 
 @pytest.mark.asyncio
-async def test_hackathons_list_requires_user_api_key_context():
-    with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())):
+async def test_hackathons_list_allows_public_read_context():
+    qs = _queryset(
+        rows=[{
+            "id": 1,
+            "title": "BLT Build Day",
+            "slug": "blt-build-day",
+            "starts_at": "2026-07-01 00:00:00",
+            "ends_at": "2026-07-03 00:00:00",
+            "is_published": 1,
+        }],
+        count=1,
+    )
+    hackathon_model = MagicMock()
+    hackathon_model.objects.return_value = qs
+
+    with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.hackathons.Hackathon", hackathon_model):
         response = await handle_hackathons(MockRequest(), MockEnv(), {}, {}, "/v2/hackathons")
 
-    assert response.status == 401
-    assert _json(response)["message"] == "User API key required"
+    assert response.status == 200
+    assert _json(response)["data"][0]["slug"] == "blt-build-day"
+    qs.filter.assert_any_call(is_published=1)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method", "path_params", "body", "path"),
     [
-        ("GET", {}, None, "/v2/hackathons"),
-        ("GET", {"slug": "blt-build-day"}, None, "/v2/hackathons/blt-build-day"),
         (
             "POST",
             {},
@@ -79,7 +93,7 @@ async def test_hackathons_list_requires_user_api_key_context():
         ),
     ],
 )
-async def test_hackathons_routes_require_user_api_key_context(method, path_params, body, path):
+async def test_hackathons_mutation_routes_require_user_api_key_context(method, path_params, body, path):
     response = await handle_hackathons(
         MockRequest(method=method, body=body),
         MockEnv(),
@@ -90,6 +104,32 @@ async def test_hackathons_routes_require_user_api_key_context(method, path_param
 
     assert response.status == 401
     assert _json(response)["message"] == "User API key required"
+
+
+@pytest.mark.asyncio
+async def test_hackathons_public_detail_by_slug_succeeds():
+    hackathon = {
+        "id": 1,
+        "title": "BLT Build Day",
+        "slug": "blt-build-day",
+        "starts_at": "2026-07-01 00:00:00",
+        "ends_at": "2026-07-03 00:00:00",
+        "is_published": 1,
+    }
+    qs = _queryset(row=hackathon)
+    hackathon_model = MagicMock()
+    hackathon_model.objects.return_value = qs
+    reg_model = MagicMock()
+    reg_model.objects.return_value = _queryset(count=5)
+
+    with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.hackathons.Hackathon", hackathon_model), \
+         patch("handlers.hackathons.HackathonRegistration", reg_model):
+        response = await handle_hackathons(MockRequest(), MockEnv(), {"slug": "blt-build-day"}, {}, "/v2/hackathons/blt-build-day")
+
+    assert response.status == 200
+    assert _json(response)["data"]["slug"] == "blt-build-day"
+    qs.get.assert_awaited_once_with(slug="blt-build-day", is_published=1)
 
 
 @pytest.mark.asyncio

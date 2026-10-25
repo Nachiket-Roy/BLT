@@ -44,21 +44,27 @@ def _job_queryset(rows=None, row=None, count=0):
 
 
 @pytest.mark.asyncio
-async def test_jobs_list_requires_user_api_key_context():
-    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())):
+async def test_jobs_list_allows_public_read_context():
+    qs = _job_queryset(
+        rows=[{"id": 1, "title": "AppSec Engineer", "is_active": 1}],
+        count=1,
+    )
+    job_model = MagicMock()
+    job_model.objects.return_value = qs
+
+    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.jobs.Job", job_model):
         response = await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs")
 
-    assert response.status == 401
-    assert _json(response)["message"] == "User API key required"
+    assert response.status == 200
+    assert _json(response)["data"] == [{"id": 1, "title": "AppSec Engineer", "is_active": 1}]
+    qs.filter.assert_any_call(is_active=1)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method", "path_params", "body", "path"),
     [
-        ("GET", {}, None, "/v2/jobs"),
-        ("GET", {"id": "5"}, None, "/v2/jobs/5"),
-        ("GET", {}, None, "/v2/jobs/stats"),
         (
             "POST",
             {},
@@ -69,7 +75,7 @@ async def test_jobs_list_requires_user_api_key_context():
         ("POST", {"id": "5"}, None, "/v2/jobs/5/view"),
     ],
 )
-async def test_jobs_routes_require_user_api_key_context(method, path_params, body, path):
+async def test_jobs_mutation_routes_require_user_api_key_context(method, path_params, body, path):
     response = await handle_jobs(
         MockRequest(method=method, body=body),
         MockEnv(),
@@ -80,6 +86,24 @@ async def test_jobs_routes_require_user_api_key_context(method, path_params, bod
 
     assert response.status == 401
     assert _json(response)["message"] == "User API key required"
+
+
+@pytest.mark.asyncio
+async def test_jobs_public_stats_and_detail_succeed():
+    job = {"id": 5, "title": "Security Engineer", "is_active": 1}
+    qs = _job_queryset(row=job, count=10)
+    job_model = MagicMock()
+    job_model.objects.return_value = qs
+
+    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.jobs.Job", job_model):
+        resp_detail = await handle_jobs(MockRequest(), MockEnv(), {"id": "5"}, {}, "/v2/jobs/5")
+        resp_stats = await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs/stats")
+
+    assert resp_detail.status == 200
+    assert _json(resp_detail)["data"]["id"] == 5
+    assert resp_stats.status == 200
+    assert "total_jobs" in _json(resp_stats)["data"]
 
 
 @pytest.mark.asyncio
