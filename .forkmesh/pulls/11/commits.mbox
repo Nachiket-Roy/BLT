@@ -1,4 +1,4 @@
-From a6cd1f1fb4d05468785d0e98a8e24487915f5360 Mon Sep 17 00:00:00 2001
+From f8c98f7c3a6a565f0c8b249b14c1f2358922be8d Mon Sep 17 00:00:00 2001
 From: Navodit-Sahai <sahainavodit781@gmail.com>
 Date: Sat, 24 Oct 2026 01:34:17 +0530
 Subject: [PATCH] Fix day-of-week range parsing for values ending in 7; allow

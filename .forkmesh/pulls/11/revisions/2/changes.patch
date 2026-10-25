@@ -1,0 +1,64 @@
+diff --git a/blt-cron/src/cron.js b/blt-cron/src/cron.js
+index 379b9ee70e..7b9ee4e84a 100644
+--- a/blt-cron/src/cron.js
++++ b/blt-cron/src/cron.js
+@@ -3,7 +3,7 @@ const RANGES = [
+   [0, 23],
+   [1, 31],
+   [1, 12],
+-  [0, 6],
++  [0, 7],
+ ];
+ 
+ function parseField(field, [min, max]) {
+@@ -33,13 +33,17 @@ function parseField(field, [min, max]) {
+ export function parseCron(expression) {
+   const fields = String(expression).trim().split(/\s+/);
+   if (fields.length !== 5) throw new Error(`cron needs 5 fields: "${expression}"`);
+-  const dow = fields[4].replace(/\b7\b/g, "0");
++  const dow = parseField(fields[4], RANGES[4]);
++  if (dow.has(7)) {
++    dow.delete(7);
++    dow.add(0);
++  }
+   return {
+     minute: parseField(fields[0], RANGES[0]),
+     hour: parseField(fields[1], RANGES[1]),
+     day: parseField(fields[2], RANGES[2]),
+     month: parseField(fields[3], RANGES[3]),
+-    weekday: parseField(dow, RANGES[4]),
++    weekday: dow,
+     dayAny: fields[2] === "*",
+     weekdayAny: fields[4] === "*",
+   };
+diff --git a/blt-cron/test/cron.test.js b/blt-cron/test/cron.test.js
+index 7c8416bf2c..558f3581aa 100644
+--- a/blt-cron/test/cron.test.js
++++ b/blt-cron/test/cron.test.js
+@@ -14,8 +14,8 @@ test("every job's cron parses", () => {
+ test("every job's binding is a service binding in wrangler.toml", () => {
+   const toml = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+   for (const job of JOBS) assert.match(toml, new RegExp(`binding = "${job.binding}"`), job.name);
+-  assert.match(toml, /binding = "HACKERHOUSE"\nservice = "hackerhouse"/);
+-  assert.match(toml, /binding = "SAMMICH"\nservice = "blt-sammich"/);
++  assert.match(toml, /binding = "HACKERHOUSE"\r?\nservice = "hackerhouse"/);
++  assert.match(toml, /binding = "SAMMICH"\r?\nservice = "blt-sammich"/);
+ });
+ 
+ test("cron matching", () => {
+@@ -27,6 +27,15 @@ test("cron matching", () => {
+   assert.ok(cronMatches("0 9 * * 1-5", at("2026-10-19T09:00:00Z")));
+   assert.ok(!cronMatches("0 9 * * 1-5", at("2026-10-18T09:00:00Z")));
+   assert.ok(cronMatches("0 0 * * 7", at("2026-10-18T00:00:00Z")));
++  assert.ok(cronMatches("0 0 * * 1-7", at("2026-10-18T00:00:00Z")));
++  assert.ok(cronMatches("0 0 * * 5-7", at("2026-10-18T00:00:00Z")));
++  assert.ok(cronMatches("0 0 * * */7", at("2026-10-18T00:00:00Z")));
++  // 2026-10-19 is a Monday, not a Sunday — these should NOT match a range ending in 7
++  assert.ok(!cronMatches("0 0 * * 5-7", at("2026-10-19T00:00:00Z")));
++  assert.ok(!cronMatches("0 0 * * */7", at("2026-10-19T00:00:00Z")));
++  // 0 and 7 are aliases for Sunday, not two separate weekday values
++  assert.deepEqual(parseCron("0 0 * * 1-7").weekday, new Set([0, 1, 2, 3, 4, 5, 6]));
++  assert.deepEqual(parseCron("0 0 * * 5-7").weekday, new Set([0, 5, 6]));
+   assert.ok(cronMatches("30 1 1,15 * *", at("2026-10-15T01:30:00Z")));
+   assert.throws(() => parseCron("* * * *"));
+   assert.throws(() => parseCron("61 * * * *"));
