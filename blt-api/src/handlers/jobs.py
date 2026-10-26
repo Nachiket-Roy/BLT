@@ -1,6 +1,6 @@
-"""User-owned jobs API handlers."""
-
 import logging
+import time
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from libs.api_key import require_scope, SCOPE_WRITE_JOBS
@@ -13,6 +13,7 @@ from utils import error_response, json_response, paginated_response, parse_json_
 
 logger = logging.getLogger(__name__)
 
+_INTERNAL_JOB_FIELDS = {"created_by_user_id"}
 _JOB_CREATE_REQUIRED = {"title", "description"}
 _JOB_CREATE_FIELDS = {
     "title",
@@ -30,6 +31,53 @@ _JOB_CREATE_FIELDS = {
 _JOB_UPDATE_FIELDS = _JOB_CREATE_FIELDS - {"title"}
 _JOB_STATUSES = {"draft", "open", "closed"}
 _JOB_TYPES = {"full-time", "part-time", "contract", "internship", "other"}
+
+
+def _utc_now() -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+
+
+def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    normalized = str(value).strip().replace("Z", "+00:00")
+    if "T" not in normalized and "+" not in normalized:
+        normalized = normalized.replace(" ", "T")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _format_datetime(value: datetime) -> str:
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _is_expired(expires_at: Optional[str]) -> bool:
+    if not expires_at:
+        return False
+    parsed = _parse_datetime(expires_at)
+    if parsed is None:
+        return False
+    now = _parse_datetime(_utc_now()) or datetime.now(timezone.utc)
+    return parsed <= now
+
+
+def _is_job_public(job: Dict[str, Any]) -> bool:
+    if not job.get("is_active", 1):
+        return False
+    if job.get("status", "open") != "open":
+        return False
+    if _is_expired(job.get("expires_at")):
+        return False
+    return True
+
+
+def _serialize_public_job(job: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v for k, v in job.items() if k not in _INTERNAL_JOB_FIELDS}
 
 
 def _normalize_bool(value: Any, field: str) -> int:
@@ -71,6 +119,12 @@ def _validate_job_payload(body: Dict[str, Any], *, partial: bool = False) -> Dic
 
         if field == "is_active":
             value = _normalize_bool(value, field)
+
+        if field == "expires_at" and value:
+            parsed_val = _parse_datetime(value)
+            if parsed_val is None:
+                raise ValueError("expires_at must be an ISO datetime")
+            value = _format_datetime(parsed_val)
 
         updates[field] = value
 
@@ -132,18 +186,33 @@ async def handle_jobs(
             return error_response("Method Not Allowed", status=405, headers={"Allow": "GET, POST, PATCH"})
 
         page, per_page = parse_pagination_params(query_params)
-        if user_id is not None:
+        is_public_request = path.endswith("/public") or query_params.get("public") == "true" or user_id is None
+        if not is_public_request:
             queryset = Job.objects(db).filter(created_by_user_id=user_id)
-        else:
-            queryset = Job.objects(db).filter(is_active=1)
+            status = query_params.get("status", "").strip()
+            if status:
+                if status not in _JOB_STATUSES:
+                    return error_response("Invalid status", status=400)
+                queryset = queryset.filter(status=status)
+            total = await queryset.count()
+            jobs = await queryset.order_by("-created").paginate(page, per_page).all()
+            return paginated_response(jobs, page=page, per_page=per_page, total=total)
+
+        now = _utc_now()
+        queryset = (
+            Job.objects(db)
+            .filter(is_active=1)
+            .filter(status="open")
+            .filter(expires_at__gt_or_null=now)
+        )
         status = query_params.get("status", "").strip()
         if status:
-            if status not in _JOB_STATUSES:
-                return error_response("Invalid status", status=400)
-            queryset = queryset.filter(status=status)
+            if status != "open":
+                return error_response("Public job listings only support status 'open'", status=400)
+            queryset = queryset.filter(status="open")
         total = await queryset.count()
         jobs = await queryset.order_by("-created").paginate(page, per_page).all()
-        return paginated_response(jobs, page=page, per_page=per_page, total=total)
+        return paginated_response([_serialize_public_job(j) for j in jobs], page=page, per_page=per_page, total=total)
     except Exception as exc:
         mapped_response = database_error_response(exc)
         if mapped_response is not None:
@@ -161,11 +230,18 @@ async def _job_detail_or_update(db: Any, request: Any, method: str, job_id_str: 
     if method == "GET":
         if user_id is not None:
             job = await Job.objects(db).get(id=job_id, created_by_user_id=user_id)
-        else:
-            job = await Job.objects(db).get(id=job_id, is_active=1)
-        if not job:
+            if job:
+                return json_response({"success": True, "data": job})
+
+        now = _utc_now()
+        job = await Job.objects(db).filter(is_active=1).get(
+            id=job_id,
+            status="open",
+            expires_at__gt_or_null=now,
+        )
+        if not job or not _is_job_public(job):
             return error_response("Job not found", status=404)
-        return json_response({"success": True, "data": job})
+        return json_response({"success": True, "data": _serialize_public_job(job)})
 
     if user_id is None:
         return error_response("User API key required", status=401)
@@ -215,10 +291,17 @@ async def _job_stats(db: Any, user_id: Optional[int]) -> Any:
         open_jobs = await Job.objects(db).filter(created_by_user_id=user_id, status="open").count()
         closed = await Job.objects(db).filter(created_by_user_id=user_id, status="closed").count()
     else:
-        total = await Job.objects(db).count()
-        active = await Job.objects(db).filter(is_active=1).count()
-        open_jobs = await Job.objects(db).filter(status="open").count()
-        closed = await Job.objects(db).filter(status="closed").count()
+        now = _utc_now()
+        open_jobs = (
+            await Job.objects(db)
+            .filter(is_active=1)
+            .filter(status="open")
+            .filter(expires_at__gt_or_null=now)
+            .count()
+        )
+        total = open_jobs
+        active = open_jobs
+        closed = 0
     return json_response({
         "success": True,
         "data": {

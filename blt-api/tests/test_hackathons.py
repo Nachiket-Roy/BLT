@@ -452,3 +452,106 @@ async def test_hackathon_register_success_hides_email_storage_fields():
     assert data["participant_name"] == "Participant"
     assert "participant_email_encrypted" not in data
     assert "participant_email_hash" not in data
+
+
+@pytest.mark.asyncio
+async def test_hackathons_public_list_and_public_route_strip_owner_id():
+    row = {
+        "id": 1,
+        "title": "BLT Build Day",
+        "slug": "blt-build-day",
+        "starts_at": "2026-07-01 00:00:00",
+        "ends_at": "2026-07-03 00:00:00",
+        "is_published": 1,
+        "created_by_user_id": 99,
+    }
+    qs = _queryset(rows=[row], count=1)
+    hackathon_model = MagicMock()
+    hackathon_model.objects.return_value = qs
+
+    with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.hackathons.Hackathon", hackathon_model):
+        resp_anon = await handle_hackathons(MockRequest(), MockEnv(), {}, {}, "/v2/hackathons")
+        resp_public = await handle_hackathons(MockRequest(user_id=42), MockEnv(), {}, {}, "/v2/hackathons/public")
+
+    assert resp_anon.status == 200
+    assert "created_by_user_id" not in _json(resp_anon)["data"][0]
+    assert resp_public.status == 200
+    assert "created_by_user_id" not in _json(resp_public)["data"][0]
+
+
+@pytest.mark.asyncio
+async def test_hackathons_public_detail_by_id_succeeds_and_strips_owner_id():
+    hackathon = {
+        "id": 1,
+        "title": "BLT Build Day",
+        "slug": "blt-build-day",
+        "starts_at": "2026-07-01 00:00:00",
+        "ends_at": "2026-07-03 00:00:00",
+        "is_published": 1,
+        "created_by_user_id": 99,
+    }
+    qs = _queryset(row=hackathon)
+    hackathon_model = MagicMock()
+    hackathon_model.objects.return_value = qs
+    reg_model = MagicMock()
+    reg_model.objects.return_value = _queryset(count=3)
+
+    with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.hackathons.Hackathon", hackathon_model), \
+         patch("handlers.hackathons.HackathonRegistration", reg_model):
+        response = await handle_hackathons(MockRequest(), MockEnv(), {"slug": "1"}, {}, "/v2/hackathons/1")
+
+    assert response.status == 200
+    data = _json(response)["data"]
+    assert data["id"] == 1
+    assert "created_by_user_id" not in data
+    assert data["status"] in ("upcoming", "ongoing", "ended")
+    qs.get.assert_awaited_once_with(id=1, is_published=1)
+
+
+@pytest.mark.asyncio
+async def test_hackathons_public_detail_detects_slug_collision():
+    hackathon1 = {"id": 1, "slug": "blt-build-day", "is_published": 1, "created_by_user_id": 10}
+    hackathon2 = {"id": 2, "slug": "blt-build-day", "is_published": 1, "created_by_user_id": 20}
+    qs = _queryset(rows=[hackathon1, hackathon2])
+    hackathon_model = MagicMock()
+    hackathon_model.objects.return_value = qs
+
+    with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.hackathons.Hackathon", hackathon_model):
+        response = await handle_hackathons(MockRequest(), MockEnv(), {"slug": "blt-build-day"}, {}, "/v2/hackathons/blt-build-day")
+
+    assert response.status == 409
+    assert "multiple" in _json(response)["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_hackathons_authenticated_user_can_view_another_users_published_hackathon():
+    published = {
+        "id": 1,
+        "title": "BLT Build Day",
+        "slug": "blt-build-day",
+        "starts_at": "2026-07-01 00:00:00",
+        "ends_at": "2026-07-03 00:00:00",
+        "is_published": 1,
+        "created_by_user_id": 99,
+    }
+    # User owns none (first get returns None), second get returns published
+    qs = _queryset()
+    qs.get = AsyncMock(side_effect=[None, published])
+    hackathon_model = MagicMock()
+    hackathon_model.objects.return_value = qs
+    reg_model = MagicMock()
+    reg_model.objects.return_value = _queryset(count=2)
+
+    with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.hackathons.Hackathon", hackathon_model), \
+         patch("handlers.hackathons.HackathonRegistration", reg_model):
+        response = await handle_hackathons(MockRequest(user_id=42), MockEnv(), {"slug": "blt-build-day"}, {}, "/v2/hackathons/blt-build-day")
+
+    assert response.status == 200
+    data = _json(response)["data"]
+    assert data["slug"] == "blt-build-day"
+    assert "created_by_user_id" not in data
+

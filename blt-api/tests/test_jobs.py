@@ -276,3 +276,117 @@ async def test_jobs_stats_returns_current_users_counts():
         "open_jobs": 8,
         "closed_jobs": 4,
     }
+
+
+@pytest.mark.asyncio
+async def test_jobs_public_list_rejects_non_open_status():
+    job_model = MagicMock()
+    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.jobs.Job", job_model):
+        resp_draft = await handle_jobs(MockRequest(), MockEnv(), {}, {"status": "draft"}, "/v2/jobs")
+        resp_closed = await handle_jobs(MockRequest(), MockEnv(), {}, {"status": "closed"}, "/v2/jobs")
+
+    assert resp_draft.status == 400
+    assert "open" in _json(resp_draft)["message"].lower()
+    assert resp_closed.status == 400
+    assert "open" in _json(resp_closed)["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_jobs_public_list_and_public_route_strip_owner_id():
+    qs = _job_queryset(
+        rows=[{"id": 1, "title": "SecOps", "created_by_user_id": 99, "is_active": 1, "status": "open"}],
+        count=1,
+    )
+    job_model = MagicMock()
+    job_model.objects.return_value = qs
+
+    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.jobs.Job", job_model):
+        resp_anon = await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs")
+        resp_public_route = await handle_jobs(MockRequest(user_id=42), MockEnv(), {}, {}, "/v2/jobs/public")
+
+    assert resp_anon.status == 200
+    assert "created_by_user_id" not in _json(resp_anon)["data"][0]
+    assert resp_public_route.status == 200
+    assert "created_by_user_id" not in _json(resp_public_route)["data"][0]
+
+
+@pytest.mark.asyncio
+async def test_jobs_public_detail_denies_draft_expired_inactive():
+    draft_job = {"id": 5, "title": "DevSec", "status": "draft", "is_active": 1, "created_by_user_id": 99}
+    expired_job = {"id": 6, "title": "DevSec", "status": "open", "is_active": 1, "expires_at": "2020-01-01 00:00:00", "created_by_user_id": 99}
+    inactive_job = {"id": 7, "title": "DevSec", "status": "open", "is_active": 0, "created_by_user_id": 99}
+
+    job_model = MagicMock()
+    job_model.objects.side_effect = [
+        _job_queryset(row=draft_job),
+        _job_queryset(row=expired_job),
+        _job_queryset(row=inactive_job),
+    ]
+
+    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.jobs.Job", job_model):
+        resp_draft = await handle_jobs(MockRequest(), MockEnv(), {"id": "5"}, {}, "/v2/jobs/5")
+        resp_expired = await handle_jobs(MockRequest(), MockEnv(), {"id": "6"}, {}, "/v2/jobs/6")
+        resp_inactive = await handle_jobs(MockRequest(), MockEnv(), {"id": "7"}, {}, "/v2/jobs/7")
+
+    assert resp_draft.status == 404
+    assert resp_expired.status == 404
+    assert resp_inactive.status == 404
+
+
+@pytest.mark.asyncio
+async def test_jobs_owner_can_view_own_draft_or_expired_job():
+    draft_job = {"id": 5, "title": "DevSec", "status": "draft", "is_active": 1, "created_by_user_id": 42}
+    qs = _job_queryset(row=draft_job)
+    job_model = MagicMock()
+    job_model.objects.return_value = qs
+
+    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.jobs.Job", job_model):
+        response = await handle_jobs(MockRequest(user_id=42), MockEnv(), {"id": "5"}, {}, "/v2/jobs/5")
+
+    assert response.status == 200
+    assert _json(response)["data"]["created_by_user_id"] == 42
+    assert _json(response)["data"]["status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_jobs_authenticated_user_can_view_public_job_with_owner_stripped():
+    public_job = {"id": 5, "title": "Security Lead", "status": "open", "is_active": 1, "created_by_user_id": 99}
+    # First get() for own job returns None, second get() for public job returns public_job
+    qs = _job_queryset()
+    qs.get = AsyncMock(side_effect=[None, public_job])
+    job_model = MagicMock()
+    job_model.objects.return_value = qs
+
+    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.jobs.Job", job_model):
+        response = await handle_jobs(MockRequest(user_id=42), MockEnv(), {"id": "5"}, {}, "/v2/jobs/5")
+
+    assert response.status == 200
+    data = _json(response)["data"]
+    assert data["id"] == 5
+    assert "created_by_user_id" not in data
+
+
+@pytest.mark.asyncio
+async def test_jobs_public_stats_filters_to_public_only():
+    qs = _job_queryset(count=7)
+    job_model = MagicMock()
+    job_model.objects.return_value = qs
+
+    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.jobs.Job", job_model):
+        response = await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs/stats")
+
+    assert response.status == 200
+    data = _json(response)["data"]
+    assert data["total_jobs"] == 7
+    assert data["active_jobs"] == 7
+    assert data["open_jobs"] == 7
+    assert data["closed_jobs"] == 0
+    qs.filter.assert_any_call(is_active=1)
+    qs.filter.assert_any_call(status="open")
+

@@ -208,6 +208,16 @@ class TestQuerySetSQLGeneration:
         sql, params = self.qs.filter(score__gte=10)._build_select_sql()
         assert "score >= ?" in sql
 
+    def test_filter_gt_or_null(self):
+        sql, params = self.qs.filter(expires_at__gt_or_null="2026-10-26 00:00:00")._build_select_sql()
+        assert "(expires_at IS NULL OR expires_at > ?)" in sql
+        assert params[0] == "2026-10-26 00:00:00"
+
+    def test_filter_gte_or_null(self):
+        sql, params = self.qs.filter(expires_at__gte_or_null="2026-10-26 00:00:00")._build_select_sql()
+        assert "(expires_at IS NULL OR expires_at >= ?)" in sql
+        assert params[0] == "2026-10-26 00:00:00"
+
     def test_filter_lt(self):
         sql, params = self.qs.filter(score__lt=10)._build_select_sql()
         assert "score < ?" in sql

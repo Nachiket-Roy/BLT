@@ -49,6 +49,8 @@ _OPERATORS = {
     "endswith",
     "gt",
     "gte",
+    "gt_or_null",
+    "gte_or_null",
     "lt",
     "lte",
     "isnull",
@@ -303,6 +305,10 @@ class QuerySet:
             return f"{field} > ?", [value]
         if op == "gte":
             return f"{field} >= ?", [value]
+        if op == "gt_or_null":
+            return f"({field} IS NULL OR {field} > ?)", [value]
+        if op == "gte_or_null":
+            return f"({field} IS NULL OR {field} >= ?)", [value]
         if op == "lt":
             return f"{field} < ?", [value]
         if op == "lte":

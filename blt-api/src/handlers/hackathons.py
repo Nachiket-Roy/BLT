@@ -71,6 +71,14 @@ def _with_status(row: Dict[str, Any]) -> Dict[str, Any]:
     return enriched
 
 
+_INTERNAL_HACKATHON_FIELDS = {"created_by_user_id"}
+
+
+def _serialize_public_hackathon(row: Dict[str, Any]) -> Dict[str, Any]:
+    data = _with_status(row)
+    return {k: v for k, v in data.items() if k not in _INTERNAL_HACKATHON_FIELDS}
+
+
 def _validate_hackathon_payload(
     body: Dict[str, Any],
     *,
@@ -179,13 +187,17 @@ async def handle_hackathons(
             return error_response("Method Not Allowed", status=405, headers={"Allow": "GET, POST, PATCH"})
 
         page, per_page = parse_pagination_params(query_params)
-        if user_id is not None:
+        is_public_request = path.endswith("/public") or query_params.get("public") == "true" or user_id is None
+        if not is_public_request:
             queryset = Hackathon.objects(db).filter(created_by_user_id=user_id)
-        else:
-            queryset = Hackathon.objects(db).filter(is_published=1)
+            total = await queryset.count()
+            rows = await queryset.order_by("-starts_at").paginate(page, per_page).all()
+            return paginated_response([_with_status(row) for row in rows], page=page, per_page=per_page, total=total)
+
+        queryset = Hackathon.objects(db).filter(is_published=1)
         total = await queryset.count()
         rows = await queryset.order_by("-starts_at").paginate(page, per_page).all()
-        return paginated_response([_with_status(row) for row in rows], page=page, per_page=per_page, total=total)
+        return paginated_response([_serialize_public_hackathon(row) for row in rows], page=page, per_page=per_page, total=total)
     except Exception as exc:
         mapped_response = database_error_response(exc)
         if mapped_response is not None:
@@ -197,16 +209,37 @@ async def handle_hackathons(
 
 async def _get_hackathon(db: Any, slug: str, user_id: Optional[int] = None) -> Any:
     if user_id is not None:
-        hackathon = await Hackathon.objects(db).get(slug=slug, created_by_user_id=user_id)
+        if slug.isdigit():
+            hackathon = await Hackathon.objects(db).get(id=int(slug), created_by_user_id=user_id)
+        else:
+            hackathon = await Hackathon.objects(db).get(slug=slug, created_by_user_id=user_id)
+        if hackathon:
+            registration_count = await HackathonRegistration.objects(db).filter(
+                hackathon_id=hackathon["id"],
+                status="registered",
+            ).count()
+            data = _with_status(hackathon)
+            data["registration_count"] = registration_count
+            return json_response({"success": True, "data": data})
+
+    if slug.isdigit():
+        hackathon = await Hackathon.objects(db).get(id=int(slug), is_published=1)
     else:
-        hackathon = await Hackathon.objects(db).get(slug=slug, is_published=1)
+        matches = await Hackathon.objects(db).filter(slug=slug, is_published=1).all()
+        if len(matches) > 1:
+            return error_response(
+                "Multiple hackathons found with this slug. Please query by hackathon ID.",
+                status=409,
+            )
+        hackathon = matches[0] if matches else await Hackathon.objects(db).get(slug=slug, is_published=1)
+
     if not hackathon:
         return error_response("Hackathon not found", status=404)
     registration_count = await HackathonRegistration.objects(db).filter(
         hackathon_id=hackathon["id"],
         status="registered",
     ).count()
-    data = _with_status(hackathon)
+    data = _serialize_public_hackathon(hackathon)
     data["registration_count"] = registration_count
     return json_response({"success": True, "data": data})
 
