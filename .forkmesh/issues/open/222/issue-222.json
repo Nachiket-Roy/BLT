@@ -1,0 +1,37 @@
+{
+    "assignees": [],
+    "author": "github",
+    "authorName": "@Nachiket-Roy on GitHub",
+    "bountyAddress": "",
+    "bountyStatus": "",
+    "bountyUsd": 0,
+    "createdAt": 1793126579000,
+    "endDate": 0,
+    "events": [
+        {
+            "attachments": [],
+            "author": "github",
+            "authorName": "@Nachiket-Roy on GitHub",
+            "body": "`Nachiket-Roy:feat/netguardian-crypto-engine` → `main`\n\n---\n_Mirrored from GitHub pull request [#1](https://github.com/Nachiket-Roy/BLT/pull/1) by @Nachiket-Roy._\n\u003c!-- forkmesh-mirror --\u003e",
+            "id": "mirror-github-pulls-1",
+            "sig": "",
+            "title": "feat(blt-cli): implement ztr-finding-1 JCS canonicalization and HMAC signing engine",
+            "ts": 1793126579000,
+            "type": "open"
+        }
+    ],
+    "labels": [
+        "github",
+        "pull-request"
+    ],
+    "milestone": "",
+    "number": 222,
+    "priority": 0,
+    "progress": 0,
+    "schema": "forkmesh-issue-v1",
+    "startDate": 0,
+    "status": "open",
+    "title": "feat(blt-cli): implement ztr-finding-1 JCS canonicalization and HMAC signing engine",
+    "updatedAt": 1793126579000,
+    "votes": 0
+}
