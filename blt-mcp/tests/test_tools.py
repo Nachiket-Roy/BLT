@@ -7,7 +7,7 @@ write confirmations, and tool execution logic on the MCP server.
 Test Scenarios:
 - `test_tools_list`: Verifies that all V1 and V2 tools are registered and returned by the server.
 - `test_tool_schemas`: Verifies that inputSchemas for tools match requirements (e.g. required fields for
-  `submit_issue`, `add_comment`, `auth_signup`, `create_bug`, etc.).
+  `submit_issue`, `auth_signup`, `create_bug`, etc.).
 - `test_submit_issue_missing_url`, `test_submit_issue_invalid_label_type`, `test_submit_issue_blank_description`:
   Checks that the custom stdin interception validation middleware rejects invalid parameters with a `code: -32602` error.
 - `test_tool_confirmation_flow`: Verifies that write operations (like `submit_issue` and `create_bug`) fail
@@ -75,7 +75,6 @@ def test_tools_list():
         tools = response["result"]["tools"]
         tool_names = [t["name"] for t in tools]
         assert "submit_issue" in tool_names
-        assert "add_comment" in tool_names
         assert "auth_signup" in tool_names
         assert "auth_signin" in tool_names
         assert "create_bug" in tool_names
@@ -152,14 +151,6 @@ def test_tool_schemas():
         assert "assignee" in properties
         assert submit_tool["inputSchema"]["required"] == ["url", "title", "description"]
 
-        # Verify add_comment schema (Issue #13)
-        comment_tool = next(t for t in tools if t["name"] == "add_comment")
-        properties = comment_tool["inputSchema"]["properties"]
-        assert "issue_id" in properties
-        assert "comment_text" in properties
-        assert "confirmed" in properties
-        assert comment_tool["inputSchema"]["required"] == ["issue_id", "comment_text"]
-
         # Verify summarize_issue_context schema (Issue #14)
         summary_tool = next(t for t in tools if t["name"] == "summarize_issue_context")
         properties = summary_tool["inputSchema"]["properties"]
@@ -180,7 +171,11 @@ def test_tool_schemas():
 
         # Verify create_bug schema
         create_bug_tool = next(t for t in tools if t["name"] == "create_bug")
-        assert create_bug_tool["inputSchema"]["required"] == ["title", "description"]
+        assert create_bug_tool["inputSchema"]["required"] == [
+            "url",
+            "title",
+            "description",
+        ]
 
         # Verify update_bug schema
         update_bug_tool = next(t for t in tools if t["name"] == "update_bug")
@@ -381,6 +376,42 @@ def test_submit_issue_blank_description():
             process.wait()
 
 
+def test_create_bug_missing_url():
+    """Test that create_bug rejects requests missing the required 'url' field."""
+    process = _init_server_process()
+    try:
+        process.stdin.write(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "create_bug",
+                        "arguments": {
+                            "title": "SQLi in query param",
+                            "description": "Found injection vulnerability",
+                        },
+                    },
+                }
+            )
+            + "\n"
+        )
+        process.stdin.flush()
+
+        response = read_jsonrpc_response(process, 2)
+        assert "error" in response
+        assert response["error"]["code"] == -32602
+        assert "Missing required parameter: 'url'" in response["error"]["message"]
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
 def test_tool_confirmation_flow():
     """Test that write operations fail without the confirmed flag."""
     cmd = [sys.executable, "-m", "blt_mcp.server"]
@@ -451,6 +482,7 @@ def test_tool_confirmation_flow():
                     "params": {
                         "name": "create_bug",
                         "arguments": {
+                            "url": "https://example.com/vuln",
                             "title": "Valid title v2",
                             "description": "Valid description v2",
                         },
@@ -484,16 +516,14 @@ async def test_summarize_issue_context_logic():
                 "title": "SQL Injection in Login Form",
                 "status": "open",
                 "description": "Found a SQL injection vulnerability in the username field.",
+                "comments": [
+                    {
+                        "content": "I confirmed this vulnerability.",
+                        "author": "security_researcher",
+                    },
+                    {"content": "Working on a fix now.", "author": "developer_bob"},
+                ],
             }
-        ),
-        "/bugs/123/comments": json.dumps(
-            [
-                {
-                    "content": "I confirmed this vulnerability.",
-                    "author": "security_researcher",
-                },
-                {"content": "Working on a fix now.", "author": "developer_bob"},
-            ]
         ),
     }
 
@@ -537,13 +567,11 @@ async def test_summarize_issue_context_regression():
         res = await summarize_issue_context_impl(inv_id, dummy_fetch)
         assert f"Error: Invalid issue ID '{inv_id}'." in res
 
-    # 2. Test URL-encoded IDs with exact fetch path assertions
+    # 2. Test URL-encoded IDs and assert no separate comments endpoint request is made
     called_paths = []
 
     async def mock_fetch_encoded(path, context=None):
         called_paths.append(path)
-        if "/comments" in path:
-            return "[]"
         return json.dumps(
             {"title": "Encoded Issue", "status": "open", "description": "Desc"}
         )
@@ -552,27 +580,23 @@ async def test_summarize_issue_context_regression():
         "123 spaces", mock_fetch_encoded
     )
     assert "/bugs/123%20spaces" in called_paths
-    assert "/bugs/123%20spaces/comments" in called_paths
+    assert not any("comments" in p for p in called_paths)
     assert "Issue ID: 123 spaces" in summary_encoded
 
-    # 3. Test comments-fetch failure distinguishing from empty list
-    # Scenario A: Comments fetch throws an exception (should yield "Comments unavailable")
-    async def mock_fetch_comments_fail(path, context=None):
-        if "comments" in path:
-            raise RuntimeError("DB Error")
+    # 3. Test comments states without querying 404 comments endpoint
+    # Scenario A: Bug has no comments key / None -> yields "Comments unavailable (not supported)."
+    async def mock_fetch_no_comments(path, context=None):
         return json.dumps(
             {"title": "Title A", "status": "open", "description": "Desc A"}
         )
 
-    summary_fail = await summarize_issue_context_impl("123", mock_fetch_comments_fail)
-    assert "Comments:\nComments unavailable (failed to retrieve)." in summary_fail
+    summary_no_comments = await summarize_issue_context_impl("123", mock_fetch_no_comments)
+    assert "Comments:\nComments unavailable (not supported)." in summary_no_comments
 
-    # Scenario B: Comments fetch returns empty list (should yield "No comments.")
+    # Scenario B: Bug has empty comments list -> yields "No comments."
     async def mock_fetch_comments_empty(path, context=None):
-        if "comments" in path:
-            return "[]"
         return json.dumps(
-            {"title": "Title B", "status": "open", "description": "Desc B"}
+            {"title": "Title B", "status": "open", "description": "Desc B", "comments": []}
         )
 
     summary_empty = await summarize_issue_context_impl("123", mock_fetch_comments_empty)

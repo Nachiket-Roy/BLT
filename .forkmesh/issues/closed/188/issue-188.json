@@ -32,6 +32,60 @@
             "sig": "1qloGJ2Ktl4na4Kx7Z_nfR7VO0xEujfYeeoyzfuFDvJYw02WfH2i3iFGVgPLqhE9CJfBXCzur2Nqo_h9VcaZCg",
             "ts": 1792547524740,
             "type": "labels"
+        },
+        {
+            "assignee": "hiralmodi",
+            "author": "z8umhj46U08jgUGw9mp2y-DMtqQIANQ7fXaMUtEJzEY",
+            "authorName": "hiralmodi",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1793018973548-1ur98b",
+            "sig": "p9zyLTIqiogYgRiTx6p0Y-Myw2vIfOGVYMavf6Vdif_wKR_kJ_88Oax4YGqIbku9z4g4_J78CVPrtSnYzTaoAQ",
+            "ts": 1793018973548,
+            "type": "claim"
+        },
+        {
+            "assignee": "hiralmodi",
+            "author": "z8umhj46U08jgUGw9mp2y-DMtqQIANQ7fXaMUtEJzEY",
+            "authorName": "hiralmodi",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1793018973981-1vrxb1f",
+            "sig": "l5YtO5DDoXHL_PNRwzg5se5aeDi1nsEOqwEPjUPRfTDw6ywccbP10HkPLLM_Llt6BxYrkw1Djuyd49wvkRYoCg",
+            "ts": 1793018973981,
+            "type": "claim"
+        },
+        {
+            "assignee": "hiralmodi",
+            "author": "z8umhj46U08jgUGw9mp2y-DMtqQIANQ7fXaMUtEJzEY",
+            "authorName": "hiralmodi",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "claim-web-1793175977360-b15n2e",
+            "sig": "d-8K3Fwh6c9j_7y7aT8yCxcy1k2--CYToZ-7zOxawI6sFi7JYIGHIuy6d9O6ubygnfjLuC66AR3-ijm54fdiCw",
+            "ts": 1793175977360,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "z8umhj46U08jgUGw9mp2y-DMtqQIANQ7fXaMUtEJzEY",
+            "authorName": "hiralmodi",
+            "authorVerified": true,
+            "body": "PR Merged! https://git.owaspblt.org/BLT/pull/31",
+            "id": "comment-web-1793176011446",
+            "sig": "jruRMN2oXWs3vj0cS6pHZMWptcXwfaMsKKjy2c0yMKbewMzlwCL85bty1aRDZzoT38gcgWEUXTysrKcYrV6FDQ",
+            "ts": 1793176011446,
+            "type": "comment"
+        },
+        {
+            "author": "-7tB7mhX5UNhZXr0OcnqC3EygNekX6xMFWLwB3s7tGk",
+            "authorName": "donnieblt",
+            "authorVerified": true,
+            "id": "status-web-1793178155477-bgw0xx",
+            "sig": "eHByrTZPLb4xKruXWNDfJVfWiJMOQi53hKQHDwzGkgsZTYh9n_0Z-6X_s9yIFbKsNndpWYSXeknsSnDgCxcBDg",
+            "status": "closed",
+            "ts": 1793178155477,
+            "type": "status"
         }
     ],
     "labels": [
@@ -46,8 +100,8 @@
     "progress": 0,
     "schema": "forkmesh-issue-v1",
     "startDate": 0,
-    "status": "open",
+    "status": "closed",
     "title": "coderabbit: fix the README, which says the folder has no configuration",
-    "updatedAt": 1792547524740,
+    "updatedAt": 1793178155477,
     "votes": 0
 }

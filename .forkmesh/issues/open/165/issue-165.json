@@ -1,5 +1,7 @@
 {
-    "assignees": [],
+    "assignees": [
+        "granger"
+    ],
     "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
     "authorName": "blt-tasks[bot]",
     "bountyAddress": "",
@@ -31,6 +33,94 @@
             "sig": "kSqyO97GUkdAXg9WWM2tcoBTyZRrBS-wz3CX-vExbOrAm5_Sjf1KXFTkJQ8Z6_isAXXhfb36CjR2qJnI09N0AQ",
             "ts": 1792547524510,
             "type": "labels"
+        },
+        {
+            "attachments": [],
+            "author": "asCxHCiy0QGUc6jW42W2W-x8mJsIhQ3dwUwp5okaYYw",
+            "authorName": "namrata",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "comment-web-1793098001854",
+            "sig": "POubC8A9Ep2SiL_652rxUKavU0-R9MOTA8XwUFcB4aaIF308dwmNGACXKdulYomZaxRHf1oGIVmKUiZsPd9uDg",
+            "ts": 1793098001854,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@namrata you can't be assigned to this issue because you are already assigned to #43. Please open a pull request for it, or comment `/unassign` there, before taking another issue. \u003c!-- blt-assign-refused:namrata --\u003e \u003c!-- blt-assign:b94ce6606b8f024c69ad --\u003e",
+            "id": "actions-1793098027925-A77vcS8y",
+            "sig": "kimliLN5kCJQFdrnD48VWvB9PdjaH8X18YF3JSYd8P6PQ7kP11k4eWlaK28Wf4XM98K5RoLQsRCs5vNIiZQMAQ",
+            "ts": 1793098027925,
+            "type": "comment"
+        },
+        {
+            "assignee": "namrata",
+            "author": "asCxHCiy0QGUc6jW42W2W-x8mJsIhQ3dwUwp5okaYYw",
+            "authorName": "namrata",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1793099171702-wx7ab",
+            "sig": "5Re6Bs8XAQ4z6xUl2qYmgxHpenborXaJOJLUuhbu5KDYF2FxWReBCHMqZe1in-bfKi7NON4T0DjQCx9AMG71Cg",
+            "ts": 1793099171702,
+            "type": "claim"
+        },
+        {
+            "assignee": "namrata",
+            "author": "asCxHCiy0QGUc6jW42W2W-x8mJsIhQ3dwUwp5okaYYw",
+            "authorName": "namrata",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "claim-web-1793099180379-3rg7q9",
+            "sig": "-jnGbPEFAGGuAZDpNAx6EKcJVEZc2JbF4kl0tdh4IZdKQhMO56dh50-W3TK3_ydKlyYiRpURqQQnF1zqNMrPAQ",
+            "ts": 1793099180379,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "1IjcdW9JCaXjDBlKkyQReX4pPsdod5yjrnO8WZhfwh0",
+            "authorName": "granger",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "comment-web-1793173121271",
+            "sig": "XoV2VCn2jyzPp3iSQDMawhCTaYtuzrPbpsTUoduxRqulPe0EHQI8XZMf_kYKaLc0Yq6I3KqokkjIuAtFOLNtCA",
+            "ts": 1793173121271,
+            "type": "comment"
+        },
+        {
+            "assignee": "granger",
+            "author": "1IjcdW9JCaXjDBlKkyQReX4pPsdod5yjrnO8WZhfwh0",
+            "authorName": "granger",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1793173134076-8h2oxi",
+            "sig": "bptabB0PsanoUw7Gut9CfAJxu2PFNAqH0ztT81syJAd6XXiPFJMWMESiqTxyi2mraU6OGeOkbIer9w3h9QZrDQ",
+            "ts": 1793173134076,
+            "type": "claim"
+        },
+        {
+            "assignee": "granger",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "actions-1793173137500-ekXMEzrB",
+            "sig": "Pn4IIwSL1a952DgQyO8OA7KhxciZfNEk5hz8fRcMqM6jBmTsOETvzPZk-m_jGnMgmwBqzeBUz9fQFVlpo4_JBA",
+            "ts": 1793173137500,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@granger you're assigned to this issue. Please open a pull request for it within 24 hours. Without a pull request or an update from you here for 24 hours, you'll be unassigned (after a warning). If you stop working on it, comment `/unassign` so someone else can pick it up. \u003c!-- blt-assign:a7583b32ea0c6a5984e6 --\u003e",
+            "id": "actions-1793173137668-dtrsKvhe",
+            "sig": "bmQh5dkUpLPwqKkKICDn9w2Xsi-VUk3i_CAo3eH2VhUPuvTn9Ul41vluhB_9fPYQYu-9nYwogWx771XpTvkaAA",
+            "ts": 1793173137668,
+            "type": "comment"
         }
     ],
     "labels": [
@@ -46,6 +136,6 @@
     "startDate": 0,
     "status": "open",
     "title": "blt-cve: make the documented BLT-YYYY-DRAFT submission pass validation",
-    "updatedAt": 1792547524510,
+    "updatedAt": 1793173137668,
     "votes": 0
 }

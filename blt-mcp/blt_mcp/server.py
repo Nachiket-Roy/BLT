@@ -14,7 +14,6 @@ Key Offerings:
   - `blt://good-first-issues`: Open 'good first issue' issues from the git.owaspblt.org issue ledger.
 - **V1 Tools**:
   - `submit_issue`: Submits a new bug report to the OWASP BLT platform (requires confirmation).
-  - `add_comment`: Adds a discussion comment to an existing bug (requires confirmation).
   - `summarize_issue_context`: Generates a formatted text summary of an issue's context.
   - `triage_vulnerability`: Integrates with Cloudflare Workers AI (Llama 3) to analyze, categorize, and prioritize issues.
   - `draft_vision_issue`: Uses Cloudflare Vision AI (LLaVA) to draft bug reports from local screenshot image files.
@@ -50,6 +49,7 @@ from blt_mcp import forge_issues, server_base, v2_resources, v2_tools  # noqa: F
 from blt_mcp.server_base import _fetch, logger, mcp
 from blt_mcp.tools import generate_ai_metadata, summarize_issue_context_impl
 from blt_mcp.validation import InterceptingStdinBuffer, StdinWrapper
+from blt_mcp.vision import build_vision_prompt, parse_vision_response
 
 GOOD_FIRST_ISSUE = "good first issue"
 
@@ -255,44 +255,6 @@ async def submit_issue(
         raise RuntimeError(f"Failed to submit issue: {e}") from e
 
 
-@mcp.tool()
-async def add_comment(issue_id: str, comment_text: str, confirmed: bool = False) -> str:
-    """
-    Add a comment to an existing BLT issue.
-
-    Args:
-        issue_id: The ID of the issue to comment on.
-        comment_text: The text of the comment.
-        confirmed: Set to true to confirm execution of this write operation.
-    """
-    if not confirmed:
-        logger.warning("Write operation 'add_comment' blocked: confirmation required.")
-        raise ValueError(
-            "Write operation requires confirmation. Please set 'confirmed': true to proceed."
-        )
-
-    logger.info("Write operation 'add_comment' confirmed. Proceeding to execution.")
-    ai_metadata = generate_ai_metadata("add_comment")
-
-    logger.info(f"Adding comment to issue: {issue_id}")
-    payload = {"content": comment_text, "metadata": ai_metadata}
-
-    headers = {
-        "X-AI-Generated": "true",
-        "X-AI-Source": "BLT-MCP",
-        "X-AI-Timestamp": ai_metadata["timestamp"],
-    }
-
-    try:
-        response = await server_base.http_client.post(
-            f"/bugs/{issue_id}/comments", json=payload, headers=headers
-        )
-        response.raise_for_status()
-        return f"Successfully added comment to issue {issue_id}"
-    except Exception as e:
-        logger.error(f"Failed to add comment: {e}")
-        raise RuntimeError(f"Failed to add comment: {e}") from e
-
 
 @mcp.tool()
 async def summarize_issue_context(issue_id: str) -> str:
@@ -414,14 +376,7 @@ async def draft_vision_issue(
 
     image_array = list(image_bytes)
 
-    prompt = (
-        "Analyze this screenshot of a web application. Identify any bugs, errors, or security vulnerabilities "
-        "shown. Provide a structured response with two sections:\n\n"
-        "TITLE: (A brief, clear title for the issue)\n\n"
-        "DESCRIPTION: (A detailed explanation of what is wrong and how to reproduce it if apparent)."
-    )
-    if context and context.strip():
-        prompt += f"\n\nAdditional user context about this image:\n{context}"
+    prompt = build_vision_prompt(context)
 
     model = (
         os.getenv("CF_VISION_MODEL")
@@ -449,12 +404,11 @@ async def draft_vision_issue(
 
             result = response.json()
             if result.get("success"):
-                analysis_text = (
-                    result["result"]["description"]
-                    if "description" in result["result"]
-                    else result.get("result", {}).get(
-                        "response", str(result.get("result"))
-                    )
+                result_body = result.get("result")
+                if not isinstance(result_body, dict):
+                    result_body = {}
+                analysis_text = result_body.get(
+                    "description", result_body.get("response")
                 )
             else:
                 raise RuntimeError(
@@ -466,7 +420,14 @@ async def draft_vision_issue(
         logger.error(f"Exception calling CF Vision AI: {e!s}")
         raise RuntimeError(f"Failed to call Cloudflare Vision AI: {e!s}") from e
 
-    return analysis_text
+    try:
+        return parse_vision_response(analysis_text)
+    except ValueError as e:
+        logger.error("Unusable Vision AI response: %s", e)
+        raise RuntimeError(
+            "Vision AI returned a response that could not be parsed into a title and "
+            "description. Please try again."
+        ) from e
 
 
 def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8080) -> None:

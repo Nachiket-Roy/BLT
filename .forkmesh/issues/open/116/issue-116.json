@@ -1,5 +1,7 @@
 {
-    "assignees": [],
+    "assignees": [
+        "namrata"
+    ],
     "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
     "authorName": "blt-tasks[bot]",
     "bountyAddress": "",
@@ -31,6 +33,50 @@
             "sig": "nooi6sq77mS_czTIz_kuKhEdYmZdnfQI0eODlbHGZKiEvmcaEx0yVBcYdLre4LEfKoB1jC_L-DfM_EdS0lHZCA",
             "ts": 1792547524020,
             "type": "labels"
+        },
+        {
+            "attachments": [],
+            "author": "asCxHCiy0QGUc6jW42W2W-x8mJsIhQ3dwUwp5okaYYw",
+            "authorName": "namrata",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "comment-web-1793183650078",
+            "sig": "LQImOPTsOlnpj74Vpgt38gYpsjuFcGoMD4d_XNV4gR8zrbw3Ty9VTziVO5FOks0zOeUL5XD28kr9BWvh0WkzAw",
+            "ts": 1793183650078,
+            "type": "comment"
+        },
+        {
+            "assignee": "namrata",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "actions-1793183678524-6Zl5VlId",
+            "sig": "wOKRAhDLDQ_OHtqWsWbDbyL94wFNi0QpaykZoq6IVKmwCeIT7FZiVCQIM-TgsbHAzadV0MMIhjfHjYZenc3ZCw",
+            "ts": 1793183678524,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@namrata you're assigned to this issue. Please open a pull request for it within 24 hours. Without a pull request or an update from you here for 24 hours, you'll be unassigned (after a warning). If you stop working on it, comment `/unassign` so someone else can pick it up. \u003c!-- blt-assign:1017e611a823a36164de --\u003e",
+            "id": "actions-1793183678628-a0SD44OZ",
+            "sig": "BbHNw4McEjLxqM_9unXSsa1RmhMaFQ9INDnjXp6OTIfsE4SRfkfTojxna1axd8bRhel01yaRPzMwIHUHSGwQBQ",
+            "ts": 1793183678628,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "asCxHCiy0QGUc6jW42W2W-x8mJsIhQ3dwUwp5okaYYw",
+            "authorName": "namrata",
+            "authorVerified": true,
+            "body": "I have raised PR #43...",
+            "id": "comment-web-1793196758084",
+            "sig": "N6dk8suUkVzx8oA0SYaYH6d_QOaYIcaVrwwsWKNQF3dfTtgvaaoElqXHl-WX49SFuF5LrIgN4dS4a_Cs1-ohAQ",
+            "ts": 1793196758084,
+            "type": "comment"
         }
     ],
     "labels": [
@@ -46,6 +92,6 @@
     "startDate": 0,
     "status": "open",
     "title": "blt-monitor: add unit tests for history storage, validation and sharding in worker.py",
-    "updatedAt": 1792547524020,
+    "updatedAt": 1793196758084,
     "votes": 0
 }
