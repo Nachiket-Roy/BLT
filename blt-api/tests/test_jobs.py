@@ -46,7 +46,7 @@ def _job_queryset(rows=None, row=None, count=0):
 @pytest.mark.asyncio
 async def test_jobs_list_allows_public_read_context():
     qs = _job_queryset(
-        rows=[{"id": 1, "title": "AppSec Engineer", "is_active": 1}],
+        rows=[{"id": 1, "title": "AppSec Engineer", "is_active": 1, "status": "open", "created_by_user_id": 99}],
         count=1,
     )
     job_model = MagicMock()
@@ -54,17 +54,19 @@ async def test_jobs_list_allows_public_read_context():
 
     with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
          patch("handlers.jobs.Job", job_model):
-        response = await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs")
+        response = await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs/public")
 
     assert response.status == 200
-    assert _json(response)["data"] == [{"id": 1, "title": "AppSec Engineer", "is_active": 1}]
+    assert _json(response)["data"] == [{"id": 1, "title": "AppSec Engineer", "is_active": 1, "status": "open"}]
     qs.filter.assert_any_call(is_active=1)
+    qs.filter.assert_any_call(status="open")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method", "path_params", "body", "path"),
     [
+        ("GET", {}, None, "/v2/jobs"),
         (
             "POST",
             {},
@@ -283,8 +285,8 @@ async def test_jobs_public_list_rejects_non_open_status():
     job_model = MagicMock()
     with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
          patch("handlers.jobs.Job", job_model):
-        resp_draft = await handle_jobs(MockRequest(), MockEnv(), {}, {"status": "draft"}, "/v2/jobs")
-        resp_closed = await handle_jobs(MockRequest(), MockEnv(), {}, {"status": "closed"}, "/v2/jobs")
+        resp_draft = await handle_jobs(MockRequest(), MockEnv(), {}, {"status": "draft"}, "/v2/jobs/public")
+        resp_closed = await handle_jobs(MockRequest(), MockEnv(), {}, {"status": "closed"}, "/v2/jobs/public")
 
     assert resp_draft.status == 400
     assert "open" in _json(resp_draft)["message"].lower()
@@ -303,13 +305,38 @@ async def test_jobs_public_list_and_public_route_strip_owner_id():
 
     with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
          patch("handlers.jobs.Job", job_model):
-        resp_anon = await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs")
+        resp_anon = await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs/public")
         resp_public_route = await handle_jobs(MockRequest(user_id=42), MockEnv(), {}, {}, "/v2/jobs/public")
 
     assert resp_anon.status == 200
     assert "created_by_user_id" not in _json(resp_anon)["data"][0]
     assert resp_public_route.status == 200
     assert "created_by_user_id" not in _json(resp_public_route)["data"][0]
+
+
+@pytest.mark.asyncio
+async def test_jobs_public_list_filters_expires_at_using_julianday():
+    qs = _job_queryset(rows=[], count=0)
+    job_model = MagicMock()
+    job_model.objects.return_value = qs
+
+    with patch("handlers.jobs.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.jobs.Job", job_model):
+        await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs/public")
+
+    calls = [str(call) for call in qs.filter.mock_calls]
+    assert any("expires_at__julianday_gt_or_null" in c for c in calls)
+
+
+@pytest.mark.asyncio
+async def test_jobs_anonymous_get_on_owner_routes_returns_401():
+    response = await handle_jobs(MockRequest(), MockEnv(), {}, {}, "/v2/jobs")
+    assert response.status == 401
+    assert _json(response)["message"] == "User API key required"
+
+    response_query = await handle_jobs(MockRequest(), MockEnv(), {}, {"public": "true"}, "/v2/jobs")
+    assert response_query.status == 401
+    assert _json(response_query)["message"] == "User API key required"
 
 
 @pytest.mark.asyncio

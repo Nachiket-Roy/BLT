@@ -1,3 +1,5 @@
+"""User-owned jobs API handlers."""
+
 import logging
 import time
 from datetime import datetime, timezone
@@ -149,7 +151,15 @@ async def handle_jobs(
     """Handle user-owned jobs routes under /v2/jobs."""
     method = str(request.method).upper()
     user_id = get_request_user_id(request)
-    if method in ("POST", "PATCH") and user_id is None:
+    is_public_read = (
+        method == "GET"
+        and (
+            path.endswith("/public")
+            or path.endswith("/stats")
+            or "id" in path_params
+        )
+    )
+    if not is_public_read and user_id is None:
         return error_response("User API key required", status=401)
 
     try:
@@ -186,33 +196,35 @@ async def handle_jobs(
             return error_response("Method Not Allowed", status=405, headers={"Allow": "GET, POST, PATCH"})
 
         page, per_page = parse_pagination_params(query_params)
-        is_public_request = path.endswith("/public") or query_params.get("public") == "true" or user_id is None
-        if not is_public_request:
-            queryset = Job.objects(db).filter(created_by_user_id=user_id)
+        if path.endswith("/public"):
+            now = _utc_now()
+            queryset = (
+                Job.objects(db)
+                .filter(is_active=1)
+                .filter(status="open")
+                .filter(expires_at__julianday_gt_or_null=now)
+            )
             status = query_params.get("status", "").strip()
             if status:
-                if status not in _JOB_STATUSES:
-                    return error_response("Invalid status", status=400)
-                queryset = queryset.filter(status=status)
+                if status != "open":
+                    return error_response("Public job listings only support status 'open'", status=400)
+                queryset = queryset.filter(status="open")
             total = await queryset.count()
             jobs = await queryset.order_by("-created").paginate(page, per_page).all()
-            return paginated_response(jobs, page=page, per_page=per_page, total=total)
+            return paginated_response([_serialize_public_job(j) for j in jobs], page=page, per_page=per_page, total=total)
 
-        now = _utc_now()
-        queryset = (
-            Job.objects(db)
-            .filter(is_active=1)
-            .filter(status="open")
-            .filter(expires_at__gt_or_null=now)
-        )
+        if user_id is None:
+            return error_response("User API key required", status=401)
+
+        queryset = Job.objects(db).filter(created_by_user_id=user_id)
         status = query_params.get("status", "").strip()
         if status:
-            if status != "open":
-                return error_response("Public job listings only support status 'open'", status=400)
-            queryset = queryset.filter(status="open")
+            if status not in _JOB_STATUSES:
+                return error_response("Invalid status", status=400)
+            queryset = queryset.filter(status=status)
         total = await queryset.count()
         jobs = await queryset.order_by("-created").paginate(page, per_page).all()
-        return paginated_response([_serialize_public_job(j) for j in jobs], page=page, per_page=per_page, total=total)
+        return paginated_response(jobs, page=page, per_page=per_page, total=total)
     except Exception as exc:
         mapped_response = database_error_response(exc)
         if mapped_response is not None:
@@ -237,7 +249,7 @@ async def _job_detail_or_update(db: Any, request: Any, method: str, job_id_str: 
         job = await Job.objects(db).filter(is_active=1).get(
             id=job_id,
             status="open",
-            expires_at__gt_or_null=now,
+            expires_at__julianday_gt_or_null=now,
         )
         if not job or not _is_job_public(job):
             return error_response("Job not found", status=404)
@@ -296,7 +308,7 @@ async def _job_stats(db: Any, user_id: Optional[int]) -> Any:
             await Job.objects(db)
             .filter(is_active=1)
             .filter(status="open")
-            .filter(expires_at__gt_or_null=now)
+            .filter(expires_at__julianday_gt_or_null=now)
             .count()
         )
         total = open_jobs

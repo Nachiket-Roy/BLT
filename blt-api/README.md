@@ -473,22 +473,24 @@ Domain endpoints use Cloudflare D1 database. See [docs/DATABASE.md](docs/DATABAS
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v2/jobs` | List owned jobs (paginated) |
-| POST | `/v2/jobs` | Create a new job |
-| GET | `/v2/jobs/{id}` | Get details of a job |
-| PATCH | `/v2/jobs/{id}` | Update a job |
-| POST | `/v2/jobs/{id}/view` | Record a view on a job |
-| GET | `/v2/jobs/stats` | Get job post statistics |
+| GET | `/v2/jobs/public` | List public jobs (paginated, unauthenticated). Filters to `is_active=1`, `status='open'`, and unexpired `expires_at`. Internal owner fields (`created_by_user_id`) are stripped. Filterable by query parameter `?status=open`. |
+| GET | `/v2/jobs` | List owned jobs (paginated, User API key required). Returns 401 without a valid user key. Filterable by query parameter `?status=` (`draft`, `open`, `closed`). |
+| POST | `/v2/jobs` | Create a new job (User API key with `write:jobs` scope required) |
+| GET | `/v2/jobs/{id}` | Get details of a job. If authenticated as the job creator, returns full job data; for anonymous or non-owner callers, returns active open unexpired job with `created_by_user_id` stripped (or 404). |
+| PATCH | `/v2/jobs/{id}` | Update a job (User API key with `write:jobs` scope required, owner only) |
+| POST | `/v2/jobs/{id}/view` | Record a view on a job (User API key required) |
+| GET | `/v2/jobs/stats` | Get job post statistics. Scoped to owned jobs if called with a User API key, or public platform-wide statistics (active, open, unexpired) if unauthenticated. |
 
 ### Hackathons
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v2/hackathons` | List owned hackathons (paginated) |
-| POST | `/v2/hackathons` | Create a new hackathon |
-| GET | `/v2/hackathons/{slug}` | Get details of a hackathon by slug |
-| PATCH | `/v2/hackathons/{id}` | Update a hackathon |
-| POST | `/v2/hackathons/{id}/register` | Register a participant for a hackathon |
+| GET | `/v2/hackathons/public` | List public hackathons (paginated, unauthenticated). Filters to published hackathons (`is_published=1`). Internal owner fields (`created_by_user_id`) are stripped. |
+| GET | `/v2/hackathons` | List owned hackathons (paginated, User API key required). Returns 401 without a valid user key. |
+| POST | `/v2/hackathons` | Create a new hackathon (User API key required) |
+| GET | `/v2/hackathons/{slug}` | Get details of a hackathon by slug or numeric ID. If authenticated as the creator, returns full hackathon data; for anonymous callers, returns published hackathon with `created_by_user_id` stripped. If multiple published hackathons share the slug, returns 409 prompting ID lookup. |
+| PATCH | `/v2/hackathons/{id}` | Update a hackathon (User API key required, owner only) |
+| POST | `/v2/hackathons/{id}/register` | Register a participant for a hackathon (User API key required) |
 
 ## Response Format
 

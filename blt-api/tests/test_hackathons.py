@@ -36,6 +36,8 @@ def _queryset(rows=None, row=None, count=0):
     qs.filter.return_value = qs
     qs.order_by.return_value = qs
     qs.paginate.return_value = qs
+    if rows is None and row is not None:
+        rows = [row]
     qs.all = AsyncMock(return_value=rows or [])
     qs.first = AsyncMock(return_value=row)
     qs.get = AsyncMock(return_value=row)
@@ -62,7 +64,7 @@ async def test_hackathons_list_allows_public_read_context():
 
     with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
          patch("handlers.hackathons.Hackathon", hackathon_model):
-        response = await handle_hackathons(MockRequest(), MockEnv(), {}, {}, "/v2/hackathons")
+        response = await handle_hackathons(MockRequest(), MockEnv(), {}, {}, "/v2/hackathons/public")
 
     assert response.status == 200
     assert _json(response)["data"][0]["slug"] == "blt-build-day"
@@ -70,9 +72,21 @@ async def test_hackathons_list_allows_public_read_context():
 
 
 @pytest.mark.asyncio
+async def test_hackathons_anonymous_get_on_owner_routes_returns_401():
+    response = await handle_hackathons(MockRequest(), MockEnv(), {}, {}, "/v2/hackathons")
+    assert response.status == 401
+    assert _json(response)["message"] == "User API key required"
+
+    response_query = await handle_hackathons(MockRequest(), MockEnv(), {}, {"public": "true"}, "/v2/hackathons")
+    assert response_query.status == 401
+    assert _json(response_query)["message"] == "User API key required"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method", "path_params", "body", "path"),
     [
+        ("GET", {}, None, "/v2/hackathons"),
         (
             "POST",
             {},
@@ -129,7 +143,8 @@ async def test_hackathons_public_detail_by_slug_succeeds():
 
     assert response.status == 200
     assert _json(response)["data"]["slug"] == "blt-build-day"
-    qs.get.assert_awaited_once_with(slug="blt-build-day", is_published=1)
+    qs.filter.assert_any_call(slug="blt-build-day", is_published=1)
+    qs.all.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -471,7 +486,7 @@ async def test_hackathons_public_list_and_public_route_strip_owner_id():
 
     with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
          patch("handlers.hackathons.Hackathon", hackathon_model):
-        resp_anon = await handle_hackathons(MockRequest(), MockEnv(), {}, {}, "/v2/hackathons")
+        resp_anon = await handle_hackathons(MockRequest(), MockEnv(), {}, {}, "/v2/hackathons/public")
         resp_public = await handle_hackathons(MockRequest(user_id=42), MockEnv(), {}, {}, "/v2/hackathons/public")
 
     assert resp_anon.status == 200
@@ -537,9 +552,10 @@ async def test_hackathons_authenticated_user_can_view_another_users_published_ha
         "is_published": 1,
         "created_by_user_id": 99,
     }
-    # User owns none (first get returns None), second get returns published
+    # User owns none (first get returns None), second query via filter().all() returns published
     qs = _queryset()
-    qs.get = AsyncMock(side_effect=[None, published])
+    qs.get = AsyncMock(return_value=None)
+    qs.all = AsyncMock(return_value=[published])
     hackathon_model = MagicMock()
     hackathon_model.objects.return_value = qs
     reg_model = MagicMock()
@@ -554,4 +570,52 @@ async def test_hackathons_authenticated_user_can_view_another_users_published_ha
     data = _json(response)["data"]
     assert data["slug"] == "blt-build-day"
     assert "created_by_user_id" not in data
+
+
+@pytest.mark.asyncio
+async def test_hackathons_all_digit_slug_fallback_when_not_matching_id():
+    hackathon = {
+        "id": 99,
+        "title": "Year 2026 Hackathon",
+        "slug": "2026",
+        "starts_at": "2026-07-01 00:00:00",
+        "ends_at": "2026-07-03 00:00:00",
+        "is_published": 1,
+        "created_by_user_id": 10,
+    }
+    # get(id=2026, is_published=1) returns None, but filter(slug="2026", is_published=1).all() returns [hackathon]
+    qs = _queryset()
+    qs.get = AsyncMock(return_value=None)
+    qs.all = AsyncMock(return_value=[hackathon])
+    hackathon_model = MagicMock()
+    hackathon_model.objects.return_value = qs
+    reg_model = MagicMock()
+    reg_model.objects.return_value = _queryset(count=1)
+
+    with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.hackathons.Hackathon", hackathon_model), \
+         patch("handlers.hackathons.HackathonRegistration", reg_model):
+        response = await handle_hackathons(MockRequest(), MockEnv(), {"slug": "2026"}, {}, "/v2/hackathons/2026")
+
+    assert response.status == 200
+    data = _json(response)["data"]
+    assert data["id"] == 99
+    assert data["slug"] == "2026"
+    assert "created_by_user_id" not in data
+
+
+@pytest.mark.asyncio
+async def test_hackathons_public_detail_empty_matches_does_not_call_redundant_get():
+    qs = _queryset()
+    qs.all = AsyncMock(return_value=[])
+    qs.get = AsyncMock()
+    hackathon_model = MagicMock()
+    hackathon_model.objects.return_value = qs
+
+    with patch("handlers.hackathons.get_db_safe", AsyncMock(return_value=MagicMock())), \
+         patch("handlers.hackathons.Hackathon", hackathon_model):
+        response = await handle_hackathons(MockRequest(), MockEnv(), {"slug": "nonexistent-slug"}, {}, "/v2/hackathons/nonexistent-slug")
+
+    assert response.status == 404
+    qs.get.assert_not_called()
 

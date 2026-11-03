@@ -51,6 +51,8 @@ _OPERATORS = {
     "gte",
     "gt_or_null",
     "gte_or_null",
+    "julianday_gt_or_null",
+    "julianday_gte_or_null",
     "lt",
     "lte",
     "isnull",
@@ -309,6 +311,10 @@ class QuerySet:
             return f"({field} IS NULL OR {field} > ?)", [value]
         if op == "gte_or_null":
             return f"({field} IS NULL OR {field} >= ?)", [value]
+        if op == "julianday_gt_or_null":
+            return f"({field} IS NULL OR julianday({field}) > julianday(?))", [value]
+        if op == "julianday_gte_or_null":
+            return f"({field} IS NULL OR julianday({field}) >= julianday(?))", [value]
         if op == "lt":
             return f"{field} < ?", [value]
         if op == "lte":

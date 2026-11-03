@@ -210,6 +210,23 @@ ROUTE_METADATA: Dict[RouteKey, RouteMetadata] = {
     ("GET", "/contributors/{id}"): _meta("Get a contributor by id.", path_params=ID_PATH),
     ("GET", "/repos"): _meta("List repositories.", query_params=PAGINATION),
     ("GET", "/repos/{id}"): _meta("Get a repository by id.", path_params=ID_PATH),
+
+    # Jobs
+    ("GET", "/jobs/public"): _meta("List public active jobs with pagination.", "public", query_params=PAGINATION + [_param("status", "string", False, "Status filter ('open').")]),
+    ("GET", "/jobs"): _meta("List owned jobs with pagination.", "api_key", query_params=PAGINATION + [_param("status", "string", False, "Status filter ('draft', 'open', 'closed').")]),
+    ("POST", "/jobs"): _meta("Create a new job posting.", "api_key"),
+    ("GET", "/jobs/{id}"): _meta("Get job details by id.", "public", path_params=ID_PATH),
+    ("PATCH", "/jobs/{id}"): _meta("Update a job posting by id.", "api_key", path_params=ID_PATH),
+    ("POST", "/jobs/{id}/view"): _meta("Record a view on a job posting.", "api_key", path_params=ID_PATH),
+    ("GET", "/jobs/stats"): _meta("Get job post statistics.", "public"),
+
+    # Hackathons
+    ("GET", "/hackathons/public"): _meta("List public published hackathons with pagination.", "public", query_params=PAGINATION),
+    ("GET", "/hackathons"): _meta("List owned hackathons with pagination.", "api_key", query_params=PAGINATION),
+    ("POST", "/hackathons"): _meta("Create a new hackathon.", "api_key"),
+    ("GET", "/hackathons/{slug}"): _meta("Get hackathon details by slug or numeric id.", "public", path_params=[_param("slug", "string", True, "Hackathon slug or numeric id.")]),
+    ("PATCH", "/hackathons/{id}"): _meta("Update a hackathon by id.", "api_key", path_params=ID_PATH),
+    ("POST", "/hackathons/{id}/register"): _meta("Register a participant for a hackathon.", "api_key", path_params=ID_PATH),
 }
 
 # Legacy /auth/* JSON routes mirror the canonical /api/auth/* metadata.

@@ -153,7 +153,14 @@ async def handle_hackathons(
     """Handle user-owned hackathon routes under /v2/hackathons."""
     method = str(request.method).upper()
     user_id = get_request_user_id(request)
-    if method in ("POST", "PATCH") and user_id is None:
+    is_public_read = (
+        method == "GET"
+        and (
+            path.endswith("/public")
+            or "slug" in path_params
+        )
+    )
+    if not is_public_read and user_id is None:
         return error_response("User API key required", status=401)
 
     try:
@@ -187,17 +194,19 @@ async def handle_hackathons(
             return error_response("Method Not Allowed", status=405, headers={"Allow": "GET, POST, PATCH"})
 
         page, per_page = parse_pagination_params(query_params)
-        is_public_request = path.endswith("/public") or query_params.get("public") == "true" or user_id is None
-        if not is_public_request:
-            queryset = Hackathon.objects(db).filter(created_by_user_id=user_id)
+        if path.endswith("/public"):
+            queryset = Hackathon.objects(db).filter(is_published=1)
             total = await queryset.count()
             rows = await queryset.order_by("-starts_at").paginate(page, per_page).all()
-            return paginated_response([_with_status(row) for row in rows], page=page, per_page=per_page, total=total)
+            return paginated_response([_serialize_public_hackathon(row) for row in rows], page=page, per_page=per_page, total=total)
 
-        queryset = Hackathon.objects(db).filter(is_published=1)
+        if user_id is None:
+            return error_response("User API key required", status=401)
+
+        queryset = Hackathon.objects(db).filter(created_by_user_id=user_id)
         total = await queryset.count()
         rows = await queryset.order_by("-starts_at").paginate(page, per_page).all()
-        return paginated_response([_serialize_public_hackathon(row) for row in rows], page=page, per_page=per_page, total=total)
+        return paginated_response([_with_status(row) for row in rows], page=page, per_page=per_page, total=total)
     except Exception as exc:
         mapped_response = database_error_response(exc)
         if mapped_response is not None:
@@ -211,6 +220,8 @@ async def _get_hackathon(db: Any, slug: str, user_id: Optional[int] = None) -> A
     if user_id is not None:
         if slug.isdigit():
             hackathon = await Hackathon.objects(db).get(id=int(slug), created_by_user_id=user_id)
+            if not hackathon:
+                hackathon = await Hackathon.objects(db).get(slug=slug, created_by_user_id=user_id)
         else:
             hackathon = await Hackathon.objects(db).get(slug=slug, created_by_user_id=user_id)
         if hackathon:
@@ -224,6 +235,14 @@ async def _get_hackathon(db: Any, slug: str, user_id: Optional[int] = None) -> A
 
     if slug.isdigit():
         hackathon = await Hackathon.objects(db).get(id=int(slug), is_published=1)
+        if not hackathon:
+            matches = await Hackathon.objects(db).filter(slug=slug, is_published=1).all()
+            if len(matches) > 1:
+                return error_response(
+                    "Multiple hackathons found with this slug. Please query by hackathon ID.",
+                    status=409,
+                )
+            hackathon = matches[0] if matches else None
     else:
         matches = await Hackathon.objects(db).filter(slug=slug, is_published=1).all()
         if len(matches) > 1:
@@ -231,7 +250,7 @@ async def _get_hackathon(db: Any, slug: str, user_id: Optional[int] = None) -> A
                 "Multiple hackathons found with this slug. Please query by hackathon ID.",
                 status=409,
             )
-        hackathon = matches[0] if matches else await Hackathon.objects(db).get(slug=slug, is_published=1)
+        hackathon = matches[0] if matches else None
 
     if not hackathon:
         return error_response("Hackathon not found", status=404)
