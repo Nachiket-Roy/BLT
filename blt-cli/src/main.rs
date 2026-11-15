@@ -18,7 +18,7 @@
 //! - `split_arguments(s: &str) -> Vec<String>`: Custom string parser that splits executable shell commands (e.g. `uv run -m blt_mcp`)
 //!   into separate tokens, respecting single and double quotes.
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 use crossterm::{
     execute,
@@ -42,7 +42,10 @@ use app::App;
 #[derive(Parser, Debug)]
 #[command(name = "blt-cli")]
 #[command(about = "OWASP BLT High-Velocity Terminal UI (TUI) & MCP Client", long_about = None)]
-struct Args {
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
     /// Explicit local path to launch the Python MCP server subprocess (e.g. "uv run -m blt_mcp.server")
     #[arg(short, long)]
     mcp_path: Option<String>,
@@ -52,17 +55,31 @@ struct Args {
     api_base: String,
 }
 
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// NetGuardian distributed scanning node commands
+    Netguardian(netguardian::NetguardianArgs),
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse arguments
-    let args = Args::parse();
+    let cli = Cli::parse();
 
     // Load .env fallback values if not specified
     let _ = dotenvy::dotenv();
 
+    if let Some(Commands::Netguardian(ref net_args)) = cli.command {
+        if let Err(e) = netguardian::run(net_args).await {
+            eprintln!("NetGuardian error: {e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
     // Check fallback env for mcp-path if CLI option is not given
-    let mcp_path = args.mcp_path.or_else(|| std::env::var("BLT_MCP_PATH").ok());
-    let api_base = std::env::var("BLT_API_BASE").unwrap_or(args.api_base);
+    let mcp_path = cli.mcp_path.or_else(|| std::env::var("BLT_MCP_PATH").ok());
+    let api_base = std::env::var("BLT_API_BASE").unwrap_or(cli.api_base);
 
     // Create App instance
     let mut app = App::new(mcp_path.clone(), api_base.clone());
