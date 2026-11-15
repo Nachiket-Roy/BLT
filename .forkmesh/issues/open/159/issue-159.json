@@ -1,5 +1,7 @@
 {
-    "assignees": [],
+    "assignees": [
+        "krish"
+    ],
     "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
     "authorName": "blt-tasks[bot]",
     "bountyAddress": "",
@@ -32,6 +34,61 @@
             "sig": "j2eGfeFZU-9RYraVkcIH35MJ8sSChrGJUbBooznd-iwY7-fKXjvhPrITaA1zKyUcdyF4K5R7CRGY-A_pxJwXAg",
             "ts": 1792547524450,
             "type": "labels"
+        },
+        {
+            "assignee": "krish",
+            "author": "Sie42rK1nTcvbTFlhZvv4LytuYI9URg8litQqBahptE",
+            "authorName": "krish",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1794646424029-allcai",
+            "sig": "SpnUhAYypBC2ndj-nks6JI2970xTZl2cpWBlqrMI1eH6j393xzZ47-8BEzbldm6claDz0MH6HlXdD42TZGw6Ag",
+            "ts": 1794646424029,
+            "type": "claim"
+        },
+        {
+            "assignee": "krish",
+            "author": "Sie42rK1nTcvbTFlhZvv4LytuYI9URg8litQqBahptE",
+            "authorName": "krish",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "claim-web-1794646428919-1lw841k",
+            "sig": "FdkVa9Do_GgzH31uBMsj-xSK0Ld53dnBANMWRWD6rRgku1caR-UjzpfSPRXsqsoQj1qwPgorQ_cQ-LrSmF9SCQ",
+            "ts": 1794646428919,
+            "type": "claim"
+        },
+        {
+            "assignee": "krish",
+            "author": "Sie42rK1nTcvbTFlhZvv4LytuYI9URg8litQqBahptE",
+            "authorName": "krish",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1794647202275-bn1vbk",
+            "sig": "GRCImGocc9gcExYqsyyQ-c2-FJ10OZU4yhvdQlFGshACppYywNBvzZutBUwfZDnLJ3xYlEF9LIx0ug10O81vBQ",
+            "ts": 1794647202275,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@krish there's been no pull request or comment from you here for 18 hours. If you're still working on this issue, please comment with an update or open a pull request; otherwise you'll be unassigned in about 6 hours so someone else can pick it up. \u003c!-- blt-assign-stale-warning:krish:1794647202275 --\u003e",
+            "id": "actions-1794714805827-abLeLkc0",
+            "sig": "Mcoc00l3ke2LcjZYrWrbAysxF10e5y14-FPOup12L0ppRxOan2jVVLj8AD3BUl0u5NO4P4INYVfbzYHY8dxZAw",
+            "ts": 1794714805827,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "Sie42rK1nTcvbTFlhZvv4LytuYI9URg8litQqBahptE",
+            "authorName": "krish",
+            "authorVerified": true,
+            "body": "I'm actively working on issue #159. I've cloned the repository and reproduced the reported issue locally. I'm currently working on the fix and will add regression tests covering LF, CRLF, and single-newline cases. I'll open a PR once the changes are tested.",
+            "id": "comment-web-1794728927535",
+            "sig": "9fDlgv7quU4DZvhXYS99RP9CBCPaZKORwBHj0Hsqh490JTQFFZQweQyQgPoKFBhYnPoKgTpZX-6YkaYf-X8gBg",
+            "ts": 1794728927535,
+            "type": "comment"
         }
     ],
     "labels": [
@@ -48,6 +105,6 @@
     "startDate": 0,
     "status": "open",
     "title": "blt-pages: make extract_domain accept CRLF and single-newline \"### URL\" sections",
-    "updatedAt": 1792547524450,
+    "updatedAt": 1794728927535,
     "votes": 0
 }

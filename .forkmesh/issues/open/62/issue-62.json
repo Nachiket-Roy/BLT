@@ -1,5 +1,7 @@
 {
-    "assignees": [],
+    "assignees": [
+        "lahama-blt"
+    ],
     "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
     "authorName": "blt-tasks[bot]",
     "bountyAddress": "",
@@ -32,6 +34,61 @@
             "sig": "VBdU2LO_Ld-019LM7Ru2qkU9BNfsW1FgywA0L-QAQZBVOEpF4SBMQLaAVW06hSpG2246qMPTcwwyW29tZ0Q6Cw",
             "ts": 1792547523480,
             "type": "labels"
+        },
+        {
+            "attachments": [],
+            "author": "vhmrWJyasPcAdt7sjiyAzB9Fyqfn-2crwat3uk4-Zk0",
+            "authorName": "lahama-blt",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "comment-web-1793815621765",
+            "sig": "E2wBVYtbNcY6l-ZFjhMCHNfdz3BG6Hfdbvx0wMilwH3Dhr7AljbRVYaxcrPOHi-BAa0fT2R9Q83hgiAygGNgDw",
+            "ts": 1793815621765,
+            "type": "comment"
+        },
+        {
+            "assignee": "lahama-blt",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "actions-1793815643170-noh0WBec",
+            "sig": "HWJROQKQkimkfmRQ5qPKxlnADit-zXTCmMQf8OAIwMJxr_68gREvPNhqYR4epGMW30QH8rhtSZYsLvOmMFYmBQ",
+            "ts": 1793815643170,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@lahama-blt you're assigned to this issue. Please open a pull request for it within 24 hours. Without a pull request or an update from you here for 24 hours, you'll be unassigned (after a warning). If you stop working on it, comment `/unassign` so someone else can pick it up. \u003c!-- blt-assign:f078cb9df194fdd354d7 --\u003e",
+            "id": "actions-1793815643370-AxD1z62J",
+            "sig": "_KyPP7Gei-V1XBdZn5ruU6IfjMwCUUfcDIGNChXp9rGw7xcKmLuKwd3veCZdSu3CNIB3qFnLc5uBpr6xP0EYAQ",
+            "ts": 1793815643370,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "vhmrWJyasPcAdt7sjiyAzB9Fyqfn-2crwat3uk4-Zk0",
+            "authorName": "lahama-blt",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "comment-web-1793815715057",
+            "sig": "El4SPYRddrKRG9F2afOVhmDF12gFtFSRFL9qTJNkriKulcUHJ3_LjpLnrxqf5Sg5u8p2zooyOOJnGxpTHFhBCA",
+            "ts": 1793815715057,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "SGh0ruiiSbMr6HnnBX9nyTbCrQaWVYtZs6sxfr4JSRg",
+            "authorName": "lahama-blt",
+            "authorVerified": true,
+            "body": "submitted PR: #70",
+            "id": "comment-web-1793928490355",
+            "sig": "T2pUnX7ky6yrxbfbndRZ_p948Fy1dFd37ZwC40d_C9rPAE66nVlwXI8hOLPz4f1n2Xph1IKKhUjDTke4-6NdBg",
+            "ts": 1793928490355,
+            "type": "comment"
         }
     ],
     "labels": [
@@ -48,6 +105,6 @@
     "startDate": 0,
     "status": "open",
     "title": "blt-vanish: fix wrong setup and test commands in CONTRIBUTING.md",
-    "updatedAt": 1792547523480,
+    "updatedAt": 1793928490355,
     "votes": 0
 }

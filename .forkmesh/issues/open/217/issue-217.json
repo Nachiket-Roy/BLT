@@ -12,7 +12,7 @@
             "attachments": [],
             "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
             "authorName": "blt-tasks[bot]",
-            "body": "## Context\n\nBLT-Start (`blt-start/`) is rated **Bronze** on [Waypoint](https://waypoint.owaspblt.org/?q=blt-start): it meets 93% of the checklist that applies to it. Waypoint rates every BLT project daily against the same checklist (`blt-waypoint/scripts/ratings.py`): **bronze** is the basics, **silver** means it runs, **gold** means it is looked after. This issue lists what is left for gold.\n\n## What to do\n\n### Silver (it runs: tests in CI, an automatic deploy, a live site and steps to run it)\n\n- **Tests run in CI.** Add automated tests and a row for the folder in `scripts/ci/tests.tsv`, so every pull request runs them (`scripts/ci/test.sh blt-start`).\n\n## Acceptance criteria\n\n- [ ] Tests run in CI\n- [ ] Waypoint shows `blt-start` as Gold after the next daily refresh\n\n## How to test locally\n\n```bash\ncurl -s https://waypoint.owaspblt.org/forge_data.json -o /tmp/forge_data.json\npython3 blt-waypoint/scripts/ratings.py /tmp/forge_data.json --report | grep -w blt-start\nscripts/ci/test.sh <your folder>\n```\n\nThe report reads your checkout, so it shows the new rating before the change is merged.",
+            "body": "## Context\n\nBLT-Start (`blt-start/`) is rated **Bronze** on [Waypoint](https://waypoint.owaspblt.org/?q=blt-start): it meets 93% of the checklist that applies to it. Waypoint rates every BLT project daily against the same checklist (`blt-waypoint/scripts/ratings.py`): **bronze** is the basics, **silver** means it runs, **gold** means it is looked after. This issue lists what is left for gold.\n\n## What to do\n\n### Silver (it runs: tests in CI, an automatic deploy, a live site and steps to run it)\n\n- **Tests run in CI.** Add automated tests and a row for the folder in `scripts/ci/tests.tsv`, so every pull request runs them (`scripts/ci/test.sh blt-start`).\n\n## Acceptance criteria\n\n- [ ] Tests run in CI\n- [ ] Waypoint shows `blt-start` as Gold after the next daily refresh\n\n## How to test locally\n\n```bash\ncurl -s https://waypoint.owaspblt.org/forge_data.json -o /tmp/forge_data.json\npython3 blt-waypoint/scripts/ratings.py /tmp/forge_data.json --report | grep -w blt-start\nscripts/ci/test.sh \u003cyour folder\u003e\n```\n\nThe report reads your checkout, so it shows the new rating before the change is merged.",
             "id": "blt-tasks-issue-217",
             "sig": "VoJaoknr6dBSkBBJwfKE40WgdZleUq5yBl4MOyyu3IlAg2iO9IkFb3RPpPsIAXoTBAedvMai8UlxcPdWA5aRAQ",
             "title": "blt-start: reach the gold standard (bronze today, 1 step)",
@@ -31,6 +31,72 @@
             "sig": "JFSR6gM8WPgK4gJHcoyaveDf2-MYB13gl4t97RU5pNpcDZLeSnrd_d9UjOUQ1xznZ64Y2pJig7YYA1amnyofAg",
             "ts": 1792782010900,
             "type": "labels"
+        },
+        {
+            "assignee": "nikhil",
+            "author": "1GHbuBrUUxD-_o_ANDkOOSA8nASzYKTCrTIKtIrPym0",
+            "authorName": "nikhil",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1793593677822-trquvz",
+            "sig": "gNK7fZWgkRDyDnUBrahSOgHjjFlJTtvKe89SEsEenzRLQ4-8zYE8tJIucfPdelLOZ9Ek2uuYkwM3GCKO0sIuCQ",
+            "ts": 1793593677822,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "1GHbuBrUUxD-_o_ANDkOOSA8nASzYKTCrTIKtIrPym0",
+            "authorName": "nikhil",
+            "authorVerified": true,
+            "body": "Hi! I'd like to work on this #217 issue.\n\nI'll inspect the existing blt-start structure, implement automated tests, integrate them into the central CI pipeline through scripts/ci/tests.tsv, and verify the Waypoint rating locally.\n\nI'll share updates as I progress. Thanks!",
+            "id": "comment-web-1793593722563",
+            "sig": "zRaI_Woy94UfjIqj9pDfWaKPVi0O8gktcGA1Qae7AAGKANnttw94qVbyRo6cJZvIFkVXuGzPSSu219Jh2EdUDA",
+            "ts": 1793593722563,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@nikhil there's been no pull request or comment from you here for 18 hours. If you're still working on this issue, please comment with an update or open a pull request; otherwise you'll be unassigned in about 6 hours so someone else can pick it up. \u003c!-- blt-assign-stale-warning:nikhil:1793593722563 --\u003e",
+            "id": "actions-1793659995012-RE7ScHTV",
+            "sig": "FED46laeZ2DXIbiQrONs2cDBxwIc-K2-KWTfiNbkFzNTnUY7lZOxTrTXPQolwQLXmvwSDXZGVHuqtodTKCTEAg",
+            "ts": 1793659995012,
+            "type": "comment"
+        },
+        {
+            "assignee": "nikhil",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "actions-1793681595936-gOd0gha0",
+            "sig": "W9_AL1TaW9VaMBNqjlwlchM3zLN1gN3hWOGN1lDs-K1GjOA8ER9SeMrMV317G9I5uTgsSSThNZJ0Y7Pr9J7MDw",
+            "ts": 1793681595936,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@nikhil you've been unassigned from this issue because there was no pull request or update for 24 hours. It's open for others now; comment `/assign` to take it again. \u003c!-- blt-assign-stale:nikhil:1793593722563 --\u003e",
+            "id": "actions-1793681596012-5UGgEpfd",
+            "sig": "GOw4zfQ6jnp750c3uSp-XES3pGvKq62feBUZRdSFpDh563tyBgaTcaisvBihg4J6D8XTY07zq1H4DAdTrEh7Dg",
+            "ts": 1793681596012,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "ioTtytvfyjL_PlKVm4I-MtviL0hMsy1_bEMSUJUGXbA",
+            "authorName": "vanshika2720",
+            "authorVerified": true,
+            "body": "I am working on it.",
+            "id": "comment-web-1794543649840",
+            "sig": "KPYEWSgPTchlphS5uvPZwooxg3sneiHpoqIbbiFTxqNiCLed0nWG3Hgzp9ibr2ZZzN9QXb6sJdOy442njLNaBg",
+            "ts": 1794543649840,
+            "type": "comment"
         }
     ],
     "labels": [
@@ -46,6 +112,6 @@
     "startDate": 0,
     "status": "open",
     "title": "blt-start: reach the gold standard (bronze today, 1 step)",
-    "updatedAt": 1792782010900,
+    "updatedAt": 1794543649840,
     "votes": 0
 }

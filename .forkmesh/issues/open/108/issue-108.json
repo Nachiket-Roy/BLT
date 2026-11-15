@@ -32,6 +32,96 @@
             "sig": "JgEvudFVirWswguOXBAGeSCTMqROS5UNbHp54lXCA5YfzDq1oat40y2EjELiZWEj9o_iqbAPvFj-uzkj68d0Bg",
             "ts": 1792547523940,
             "type": "labels"
+        },
+        {
+            "attachments": [],
+            "author": "Hq3ScFNWV2kELU_o5f1ApiQT5WpGQCdRKEebtlDzhfk",
+            "authorName": "emmanuelmj",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "comment-web-1793559924103",
+            "sig": "qJV8S1vw9E1dAXgy53XlJ7QqtdZC8wgRtnHZhQVezbsTCUWvlDQuao1biSqvBzEJf4vhyGVTM-qKHojROxXLDg",
+            "ts": 1793559924103,
+            "type": "comment"
+        },
+        {
+            "assignee": "emmanuelmj",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "actions-1793559944574-S_gheMhJ",
+            "sig": "UTk6usK_G7njMEVAgjKINdiDmvuOakn81P1CG-L4EOaHSnQDHAqRXv5_X4uLyY1P-ofkclRZ2qviBGbJCOEzBw",
+            "ts": 1793559944574,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@emmanuelmj you're assigned to this issue. Please open a pull request for it within 24 hours. Without a pull request or an update from you here for 24 hours, you'll be unassigned (after a warning). If you stop working on it, comment `/unassign` so someone else can pick it up. \u003c!-- blt-assign:d543aff806a679d2541e --\u003e",
+            "id": "actions-1793559944725-tDluubPS",
+            "sig": "TSPcD39Um6mz9Ek9Kfp3Aj4VTcOWQ1Rdrfee261AbAZthIf0TCPGucV3yhW8t9Uu5gYfN0Hr8QuYJCeNhHsoCg",
+            "ts": 1793559944725,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@emmanuelmj there's been no pull request or comment from you here for 18 hours. If you're still working on this issue, please comment with an update or open a pull request; otherwise you'll be unassigned in about 6 hours so someone else can pick it up. \u003c!-- blt-assign-stale-warning:emmanuelmj:1793559944574 --\u003e",
+            "id": "actions-1793627597183-pKXo7p-p",
+            "sig": "gdm4qqfqxV9ziTYtHV6mcaCJi9QMFYPMhfRDg5QBt_h_wPuezVsSdb_ogExhZkZk8b5mm6GH3mTEx3tOCa6zAw",
+            "ts": 1793627597183,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "lJIMl3X9dy_EhiCbSdL9jZqcxWjH-P4q6v3bQQr2J_4",
+            "authorName": "emmanuelmj",
+            "authorVerified": true,
+            "body": "PR raised at #60",
+            "id": "comment-web-1793670973193",
+            "sig": "jRum7wBTjtvzvsT222SIM3fmHq2Z-Norg1ftet5yTlL-SUFeYMPqU7nmWStm4kui7VnB1ZCkI9YQVHD6z4tgDg",
+            "ts": 1793670973193,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "lJIMl3X9dy_EhiCbSdL9jZqcxWjH-P4q6v3bQQr2J_4",
+            "authorName": "emmanuelmj",
+            "authorVerified": true,
+            "body": "PR raised at !60",
+            "id": "edit-web-1793677915570-mpm42b",
+            "sig": "CrEKa3qroRVjs_poxBTEFLB53OvllJhUrUTg3udMFzPUxSXNhNRJW6uaJioQfIr7vRdbDGr1fYflE5INzcGaAw",
+            "target": "comment-web-1793670973193",
+            "ts": 1793677915570,
+            "type": "edit"
+        },
+        {
+            "attachments": [],
+            "author": "lJIMl3X9dy_EhiCbSdL9jZqcxWjH-P4q6v3bQQr2J_4",
+            "authorName": "emmanuelmj",
+            "authorVerified": true,
+            "body": "PR raised at https://git.owaspblt.org/BLT/pull/60",
+            "id": "edit-web-1793678034101-1oz2tod",
+            "sig": "7l25HAJj__DTOGA_876XdGaGBi3VUE5kcKDwDmkTa4ec4AkiN-zoVtbsyOtjHD7Dk_EGaRKFneOX5e6QcvnZDQ",
+            "target": "comment-web-1793670973193",
+            "ts": 1793678034101,
+            "type": "edit"
+        },
+        {
+            "assignee": "emmanuelmj",
+            "author": "shGX3dQR9Rrobo7sHWc0ZYZ9XbxHHpyGvbsuopBXKWk",
+            "authorName": "emmanuelmj",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "claim-web-1793854380526-1y0fjah",
+            "sig": "Ma1wMNPgLYOcX0f8fik7I9s4NUeVZ2t7BUXwAeqXl2V_NADRroiIkMH7m6XOryLpoT2Ee9yCYVEPsrQlmwa2Aw",
+            "ts": 1793854380526,
+            "type": "claim"
         }
     ],
     "labels": [
@@ -48,6 +138,6 @@
     "startDate": 0,
     "status": "open",
     "title": "blt-next: clean up README leftovers and wrong setup steps",
-    "updatedAt": 1792547523940,
+    "updatedAt": 1793854380526,
     "votes": 0
 }

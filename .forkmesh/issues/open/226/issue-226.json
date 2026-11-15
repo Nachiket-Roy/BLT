@@ -1,0 +1,111 @@
+{
+    "assignees": [
+        "himaneeesh"
+    ],
+    "author": "s3hhVb22t037OCG2vjJx291ljjPDh7-mX6PliP4yDAI",
+    "authorName": "himaneeesh",
+    "bountyAddress": "",
+    "bountyStatus": "",
+    "bountyUsd": 0,
+    "createdAt": 1793619540960,
+    "endDate": 0,
+    "events": [
+        {
+            "attachments": [],
+            "author": "s3hhVb22t037OCG2vjJx291ljjPDh7-mX6PliP4yDAI",
+            "authorName": "himaneeesh",
+            "authorVerified": true,
+            "body": "When I post a comment on a pull request, there is no Edit option available for my own comment.\n\nThis makes it impossible to correct formatting, typos, or incomplete information without posting a second comment.\n\nExpected behavior:\nAuthors should see an Edit action for their own pull-request comments.\n\nActual behavior:\nNo Edit action is available, including when hovering over the comment.",
+            "id": "open-web-1793619540960",
+            "sig": "p4oh_iYvW2C6fOVKQnHr61uwSQAW1lY16jYCtUzr_FatlhqRsnJiMrBr0cyKF-zR7xZI0OOFkwa4naGNqV4lDw",
+            "title": "forge: allow authors to edit their own pull-request comments",
+            "ts": 1793619540960,
+            "type": "open"
+        },
+        {
+            "author": "FTSqIIVcAz6yrEUfHk8wm1rr_FLa2bBVWJKeRKZCwcQ",
+            "authorName": "navodit",
+            "authorVerified": true,
+            "id": "vote-web-1793621936866-ldn1x3",
+            "sig": "UeS-TKIMMT3Pw9Q3hn53MaHyjB6feXh6kxqoptl2K_WH4HoP7qtHTzYt_I8q7x1rSQjfpP_D_khhKJ09OJ1qAg",
+            "ts": 1793621936866,
+            "type": "vote"
+        },
+        {
+            "author": "asCxHCiy0QGUc6jW42W2W-x8mJsIhQ3dwUwp5okaYYw",
+            "authorName": "namrata",
+            "authorVerified": true,
+            "id": "vote-web-1793632326051-1x6rhdc",
+            "sig": "9lA79-rO8NM3mkTOFtp5n_5wynN7Nutpx3xAfNUR1s_qPAYTUPKdWNes2L8EaWFXlG2M4zuzaWM8QCLE8xgtAg",
+            "ts": 1793632326051,
+            "type": "vote"
+        },
+        {
+            "author": "g4zKzd5qI2ZOHVQpfCK_wlazIkZ8L6fuW1YkXn09xsE",
+            "authorName": "hrinkar01",
+            "authorVerified": true,
+            "id": "vote-web-1793684677573-1ujliyq",
+            "sig": "1dXYQdfWMnmGjIw35kt9HKFPka1IOOZA3jwUDtajUGREYwshyyQFC19gIlIXLH4TqLK7SSMOYLD-zRYxoykSDA",
+            "ts": 1793684677573,
+            "type": "vote"
+        },
+        {
+            "attachments": [],
+            "author": "s3hhVb22t037OCG2vjJx291ljjPDh7-mX6PliP4yDAI",
+            "authorName": "himaneeesh",
+            "authorVerified": true,
+            "body": "Edit- Issue focuses on how to allow changing description of a post contributor authored.",
+            "id": "comment-web-1793791875841",
+            "sig": "GgdKDLVkgMxGTT_6R-eDr-xjky2MbZUT1I8AO1V2BbEycgXVq3RJm4FP2rMKfLwJjoJNvTfSOWudZVwdkchNCQ",
+            "ts": 1793791875841,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "s3hhVb22t037OCG2vjJx291ljjPDh7-mX6PliP4yDAI",
+            "authorName": "himaneeesh",
+            "authorVerified": true,
+            "body": "Edit- Issue focuses on how to allow changing description of a post contributor authored. Not comments, the first description ",
+            "id": "edit-web-1793791905309-gjtl9k",
+            "sig": "i-MO-BKcceET2mzujkKeIv0TGSVv-oaz_9qMglOolEi4KBQs_uCR0L7kl-N4ucI_nQf0r3SuCFPQ-eiAmQCuAQ",
+            "target": "comment-web-1793791875841",
+            "ts": 1793791905309,
+            "type": "edit"
+        },
+        {
+            "assignee": "himaneeesh",
+            "author": "s3hhVb22t037OCG2vjJx291ljjPDh7-mX6PliP4yDAI",
+            "authorName": "himaneeesh",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1793808288462-qm9xsf",
+            "sig": "bYkv3C2S1Q99wBf-6luipPwfldbzJeNN-MOn37X47ksylj2Q-CqvEQM4IKgNGBem2D-tLQEVR7R137r3CH_uDw",
+            "ts": 1793808288462,
+            "type": "claim"
+        },
+        {
+            "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
+            "authorName": "blt-tasks[bot]",
+            "id": "blt-tasks-smart-labels-226",
+            "labels": [
+                "forge"
+            ],
+            "sig": "_Lb_5HmA6wd5UJyKOJYnmP35EEx4_MSZtnb1UP4Wj6M6ucBV85gZkOvDNTxgTCuA7ZXkRNVYKCzZV6xujgPTAA",
+            "ts": 1794025420133,
+            "type": "labels"
+        }
+    ],
+    "labels": [
+        "forge"
+    ],
+    "milestone": "",
+    "number": 226,
+    "priority": 0,
+    "progress": 0,
+    "schema": "forkmesh-issue-v1",
+    "startDate": 0,
+    "status": "open",
+    "title": "forge: allow authors to edit their own pull-request comments",
+    "updatedAt": 1794025420133,
+    "votes": 3
+}

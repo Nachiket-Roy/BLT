@@ -86,6 +86,7 @@ ADMIN_TABLE_SCHEMAS = {
             ("channel_count", "INTEGER"),
             ("member_count", "INTEGER"),
             ("invite_link", "TEXT"),
+            ("stats_json", "TEXT"),
             ("created_at", "TEXT"),
             ("updated_at", "TEXT"),
         ],
@@ -312,7 +313,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(__file__).resolve().parent / "data"
 PROJECT_DATA = load_json_file(DATA_DIR / "projects.json")
 REPO_DATA = load_json_file(DATA_DIR / "repos.json")
-APP_VERSION = load_text_file(ROOT_DIR / "VERSION") or "unknown"
+# The version comes from APP_VERSION in wrangler.toml [vars]; see app_version().
+APP_VERSION = "unknown"
 
 # Welcome texts live in src/data/message-<team_id>-team_join.md (one source per workspace).
 
@@ -526,12 +528,9 @@ def build_blt_branding_block(
             {
                 "type": "image",
                 "image_url": "{0}/logo-hit?{1}".format(app_base_url(env), logo_query),
-                "alt_text": "BLT Sammich",
+                "alt_text": "OWASP BLT",
             },
-            {
-                "type": "mrkdwn",
-                "text": "Sent by <{0}|BLT Sammich>".format(app_base_url(env)),
-            },
+            {"type": "mrkdwn", "text": "Welcome aboard! :rocket:"},
         ],
     }
 
@@ -2015,7 +2014,8 @@ async def db_upsert_workspace(
             "icon_url, invite_link, manifest_yaml, installer_slack_user_id, installer_name, created_at, updated_at"
             ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(team_id) DO UPDATE SET "
-            "team_name = excluded.team_name, "
+            "team_name = CASE WHEN excluded.team_name != '' AND excluded.team_name != excluded.team_id "
+            "THEN excluded.team_name ELSE teams.team_name END, "
             "app_id = CASE WHEN excluded.app_id != '' THEN excluded.app_id ELSE teams.app_id END, "
             "app_name = CASE WHEN excluded.app_name != '' THEN excluded.app_name ELSE teams.app_name END, "
             "app_icon_url = CASE WHEN excluded.app_icon_url != '' THEN excluded.app_icon_url ELSE teams.app_icon_url END, "
@@ -2200,15 +2200,13 @@ async def refresh_workspace_channels_from_slack(
         if not cursor:
             break
 
-    channel_count = 0
-    member_total = 0
+    team_id = str(workspace.get("team_id") or "").strip()
+    channels = [channel for channel in channels if channel_in_team(channel, team_id)]
     for channel in channels:
         metadata = slack_channel_metadata(channel)
         channel_id = str(metadata.get("channel_id") or "").strip()
         if not channel_id:
             continue
-        channel_count += 1
-        member_total += int(metadata.get("member_count") or 0)
         await db_upsert_channel(
             env,
             workspace_id,
@@ -2234,10 +2232,349 @@ async def refresh_workspace_channels_from_slack(
             locale=str(metadata.get("locale") or ""),
             metadata_json=str(metadata.get("metadata_json") or ""),
         )
+    counts = slack_team_counts(channels, team_id)
     await db_update_workspace_channel_member_counts(
-        env, workspace_id, channel_count, member_total
+        env, workspace_id, counts["channel_count"], counts["member_count"]
     )
-    return {"channel_count": channel_count, "member_count": member_total}
+    return counts
+
+
+def channel_in_team(channel: Dict[str, Any], team_id: str) -> bool:
+    # A token lists its own workspace's channels whatever team it is asked about, so a
+    # channel from another team is left out rather than counted under this one.
+    context_team_id = str(channel.get("context_team_id") or "").strip()
+    return not (context_team_id and team_id and context_team_id != team_id)
+
+
+def slack_team_counts(channels: List[Dict[str, Any]], team_id: str = "") -> Dict[str, int]:
+    """The public page's counts from conversations.list: open public channels, and members
+    as the general channel's num_members, since every member is in it."""
+    channel_count = 0
+    member_count = 0
+    for channel in channels:
+        if not isinstance(channel, dict) or not channel_in_team(channel, team_id):
+            continue
+        if any(channel.get(flag) for flag in ("is_archived", "is_private", "is_im", "is_mpim")):
+            continue
+        channel_count += 1
+        if channel.get("is_general"):
+            member_count = int(channel.get("num_members") or 0)
+    return {"channel_count": channel_count, "member_count": member_count}
+
+
+# One run costs an auth.test per bot token, then a team.info and up to
+# WORKSPACE_CHANNEL_PAGES conversations.list pages per workspace.
+WORKSPACE_CHANNEL_PAGES = 4
+WORKSPACE_SYNC_MIN_SUBREQUESTS = 8
+
+
+def workspace_name_missing(workspace: Dict[str, Any]) -> bool:
+    name = str(workspace.get("team_name") or "").strip()
+    return not name or name == str(workspace.get("team_id") or "").strip()
+
+
+async def db_update_workspace_details(
+    env: Any, workspace_id: Any, team_name: str = "", icon_url: str = ""
+) -> bool:
+    await ensure_schema(env)
+    await d1_run(
+        env,
+        (
+            "UPDATE teams SET "
+            "team_name = CASE WHEN ? != '' THEN ? ELSE team_name END, "
+            "icon_url = CASE WHEN ? != '' AND COALESCE(icon_url, '') = '' THEN ? ELSE icon_url END, "
+            "updated_at = ? WHERE id = ?"
+        ),
+        [team_name, team_name, icon_url, icon_url, utc_now(), workspace_id],
+    )
+    return True
+
+
+async def slack_get(token: str, method: str, query: Dict[str, str]) -> Dict[str, Any]:
+    ok, payload, _ = await fetch_json(
+        "https://slack.com/api/{0}?{1}".format(method, urlencode(query)),
+        headers={"Authorization": "Bearer {0}".format(token)},
+    )
+    return payload if ok and payload.get("ok", False) else {}
+
+
+async def list_public_channels(
+    env: Any, token: str, summary: Dict[str, Any], budget: int
+) -> Optional[List[Dict[str, Any]]]:
+    """Every open public channel the token's workspace has, or None when the list could not
+    be read to the end (a partial list never replaces counts or stats)."""
+    channels: List[Dict[str, Any]] = []
+    cursor = ""
+    for _ in range(WORKSPACE_CHANNEL_PAGES):
+        if summary["subrequests"] >= budget:
+            return None
+        summary["subrequests"] += 1
+        query = {"types": "public_channel", "exclude_archived": "true", "limit": "1000"}
+        if cursor:
+            query["cursor"] = cursor
+        payload = await slack_get(token, "conversations.list", query)
+        if not payload:
+            return None
+        channels.extend(c for c in payload.get("channels") or [] if isinstance(c, dict))
+        cursor = str((payload.get("response_metadata") or {}).get("next_cursor") or "")
+        if not cursor:
+            return channels
+    return None
+
+
+def workspace_stats(workspace: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        stats = json.loads(str(workspace.get("stats_json") or "") or "{}")
+    except ValueError:
+        stats = {}
+    return stats if isinstance(stats, dict) else {}
+
+
+async def db_update_workspace_stats(env: Any, workspace_id: Any, stats: Dict[str, Any]) -> None:
+    await d1_run(
+        env,
+        "UPDATE teams SET stats_json = ? WHERE id = ?",
+        [json.dumps(stats, separators=(",", ":"), sort_keys=True), workspace_id],
+    )
+
+
+DASHBOARD_TOP_CHANNELS = 10
+CHANNEL_FAMILY_MIN = 3
+
+
+def channel_text(channel: Dict[str, Any], field: str) -> str:
+    value = channel.get(field)
+    if isinstance(value, dict):
+        value = value.get("value")
+    return " ".join(str(value or "").split())
+
+
+def slack_channel_stats(
+    channels: List[Dict[str, Any]], team_id: str = "", now: Optional[float] = None
+) -> Dict[str, Any]:
+    """The dashboard's channel stats, from the same open public channels the counts use."""
+    now = time.time() if now is None else now
+    public = [
+        channel
+        for channel in channels
+        if isinstance(channel, dict)
+        and channel_in_team(channel, team_id)
+        and not any(channel.get(flag) for flag in ("is_archived", "is_private", "is_im", "is_mpim"))
+    ]
+
+    def summary(channel: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "id": str(channel.get("id") or ""),
+            "name": str(channel.get("name") or ""),
+            "members": int(channel.get("num_members") or 0),
+            "created": int(channel.get("created") or 0),
+            "purpose": channel_text(channel, "purpose")[:140],
+        }
+
+    by_members = sorted(public, key=lambda c: (-int(c.get("num_members") or 0), str(c.get("name") or "")))
+    dated = sorted((c for c in public if int(c.get("created") or 0) > 0), key=lambda c: int(c.get("created") or 0))
+    families: Dict[str, int] = {}
+    for channel in public:
+        name = str(channel.get("name") or "")
+        if "-" in name:
+            prefix = name.split("-", 1)[0]
+            families[prefix] = families.get(prefix, 0) + 1
+    members = sorted(int(c.get("num_members") or 0) for c in public)
+    median = 0
+    if members:
+        middle = len(members) // 2
+        median = members[middle] if len(members) % 2 else (members[middle - 1] + members[middle]) // 2
+    return {
+        "top": [summary(c) for c in by_members[:DASHBOARD_TOP_CHANNELS]],
+        "oldest": summary(dated[0]) if dated else None,
+        "newest": [summary(c) for c in reversed(dated[-5:])],
+        "created_last_year": sum(1 for c in dated if int(c.get("created") or 0) >= now - 365 * 86400),
+        "families": [
+            {"prefix": prefix, "channels": count}
+            for prefix, count in sorted(families.items(), key=lambda item: (-item[1], item[0]))
+            if count >= CHANNEL_FAMILY_MIN
+        ][:8],
+        "quiet": sum(1 for count in members if count <= 2),
+        "median_members": median,
+        "described": sum(1 for c in public if channel_text(c, "purpose") or channel_text(c, "topic")),
+        "total": len(public),
+    }
+
+
+async def db_workspace_activity_stats(env: Any, workspace_id: Any, team_id: str) -> Dict[str, Any]:
+    """Join patterns, newcomer time zones and welcome opens from what the bot has recorded."""
+    days = result_rows(
+        await d1_run(
+            env,
+            (
+                "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS joins FROM events "
+                "WHERE workspace_id = ? AND event_type = 'Team_Join' GROUP BY day ORDER BY day"
+            ),
+            [workspace_id],
+        )
+    )
+    hours = result_rows(
+        await d1_run(
+            env,
+            (
+                "SELECT CAST(substr(created_at, 12, 2) AS INTEGER) AS hour, COUNT(*) AS joins FROM events "
+                "WHERE workspace_id = ? AND event_type = 'Team_Join' GROUP BY hour"
+            ),
+            [workspace_id],
+        )
+    )
+    zones = result_rows(
+        await d1_run(
+            env,
+            (
+                "SELECT tz, COUNT(*) AS people FROM users WHERE team_id = ? AND tz != '' "
+                "AND is_bot = 0 GROUP BY tz ORDER BY people DESC, tz"
+            ),
+            [team_id],
+        )
+    )
+    welcome = (
+        result_rows(
+            await d1_run(
+                env,
+                (
+                    "SELECT COUNT(*) AS sent, SUM(opened_at != '') AS opened, "
+                    "SUM(opened_via LIKE 'slack-client%') AS opened_in_app FROM events "
+                    "WHERE workspace_id = ? AND event_type = 'Team_Join_Welcome'"
+                ),
+                [workspace_id],
+            )
+        )
+        or [{}]
+    )[0]
+    weekdays = [0] * 7
+    record = {"day": "", "joins": 0}
+    last_30_start = (datetime.now(timezone.utc) - timedelta(days=29)).date().isoformat()
+    last_30 = 0
+    for row in days:
+        day, joins = str(row.get("day") or ""), int(row.get("joins") or 0)
+        try:
+            weekdays[datetime.strptime(day, "%Y-%m-%d").weekday()] += joins
+        except ValueError:
+            continue
+        if joins > record["joins"]:
+            record = {"day": day, "joins": joins}
+        if day >= last_30_start:
+            last_30 += joins
+    by_hour = [0] * 24
+    for row in hours:
+        hour = int(row.get("hour") or 0)
+        if 0 <= hour < 24:
+            by_hour[hour] = int(row.get("joins") or 0)
+    return {
+        "joins": sum(weekdays),
+        "joins_last_30_days": last_30,
+        "tracking_since": str(days[0].get("day") or "") if days else "",
+        "record_day": record,
+        "joins_by_weekday": weekdays,
+        "joins_by_hour_utc": by_hour,
+        "time_zones": [
+            {"tz": str(row.get("tz") or ""), "people": int(row.get("people") or 0)} for row in zones[:5]
+        ],
+        "time_zone_count": len(zones),
+        "people_with_time_zone": sum(int(row.get("people") or 0) for row in zones),
+        "welcome_sent": int(welcome.get("sent") or 0),
+        "welcome_opened": int(welcome.get("opened") or 0),
+        "welcome_opened_in_app": int(welcome.get("opened_in_app") or 0),
+    }
+
+
+async def db_workspace_dashboard(env: Any, team_id: str) -> Optional[Dict[str, Any]]:
+    await ensure_schema(env)
+    rows = result_rows(
+        await d1_run(
+            env,
+            (
+                "SELECT id, team_id, team_name, icon_url, invite_link, channel_count, member_count, "
+                "stats_json FROM teams WHERE team_id = ?"
+            ),
+            [team_id],
+        )
+    )
+    if not rows:
+        return None
+    row = rows[0]
+    return {
+        "team_id": str(row.get("team_id") or ""),
+        "team_name": str(row.get("team_name") or ""),
+        "icon_url": str(row.get("icon_url") or ""),
+        "invite_link": str(row.get("invite_link") or ""),
+        "channel_count": int(row.get("channel_count") or 0),
+        "member_count": int(row.get("member_count") or 0),
+        "stats": workspace_stats(row),
+        "team_join_history": await db_get_team_join_history(env, row.get("id")),
+    }
+
+
+async def sync_workspace_details(env: Any, budget: int = 50) -> Dict[str, Any]:
+    """Fill in each workspace's name and icon (team.info) and its channel and member counts
+    (conversations.list), which Slack events don't carry. Counts need a bot token issued by
+    that workspace; without one a workspace keeps the counts it has."""
+    workspaces = await db_get_user_workspaces(env, None)
+    summary = {"workspaces": len(workspaces), "named": 0, "counted": 0, "subrequests": 0}
+    if not workspaces:
+        return summary
+    tokens: List[str] = []
+    for workspace in workspaces:
+        token = await db_get_workspace_bot_token(
+            env,
+            team_id=str(workspace.get("team_id") or ""),
+            app_id=str(workspace.get("app_id") or ""),
+        )
+        tokens.append(str(token or "").strip())
+    tokens.append(str(env_value(env, "SLACK_BOT_TOKEN", "") or "").strip())
+    tokens = list(dict.fromkeys(token for token in tokens if token))
+    token_by_team: Dict[str, str] = {}
+    for token in tokens:
+        if summary["subrequests"] >= budget:
+            return summary
+        summary["subrequests"] += 1
+        token_team_id = str((await slack_get(token, "auth.test", {})).get("team_id") or "")
+        if token_team_id:
+            token_by_team.setdefault(token_team_id, token)
+    for workspace in workspaces:
+        team_id = str(workspace.get("team_id") or "").strip()
+        token = token_by_team.get(team_id) or (tokens[0] if tokens else "")
+        if not team_id:
+            continue
+        stats = workspace_stats(workspace)
+        if token and summary["subrequests"] < budget:
+            summary["subrequests"] += 1
+            team = (await slack_get(token, "team.info", {"team": team_id})).get("team") or {}
+            if str(team.get("id") or "") == team_id:
+                icon = team.get("icon") or {}
+                await db_update_workspace_details(
+                    env,
+                    workspace.get("id"),
+                    team_name=str(team.get("name") or "").strip(),
+                    icon_url=str(icon.get("image_132") or icon.get("image_88") or "").strip(),
+                )
+                summary["named"] += 1 if team.get("name") else 0
+                stats["team"] = {
+                    "domain": str(team.get("domain") or ""),
+                    "founded": int(team.get("date_created") or 0),
+                }
+        channels = (
+            await list_public_channels(env, token, summary, budget)
+            if team_id in token_by_team
+            else None
+        )
+        if channels is not None:
+            counts = slack_team_counts(channels, team_id)
+            await db_update_workspace_channel_member_counts(
+                env, workspace.get("id"), counts["channel_count"], counts["member_count"]
+            )
+            stats["channels"] = slack_channel_stats(channels, team_id)
+            summary["counted"] += 1
+        stats["activity"] = await db_workspace_activity_stats(env, workspace.get("id"), team_id)
+        stats["updated_at"] = utc_now()
+        await db_update_workspace_stats(env, workspace.get("id"), stats)
+    return summary
 
 
 async def db_update_workspace_invite_link(
@@ -3709,7 +4046,7 @@ async def upsert_connected_workspace(
         installer_slack_user_id=installer_user_id,
         invite_link=invite_link,
     )
-    if workspace_id:
+    if workspace_id and (channel_count or member_count):
         await db_update_workspace_channel_member_counts(
             env, workspace_id, channel_count, member_count
         )
@@ -5330,8 +5667,25 @@ async def handle_cron_dispatch(request: Any, env: Any) -> Any:
     except Exception as error:
         log_exception_one_line(error, "scheduled_event_retention_failed")
         retention = {"error": "event_retention_failed"}
+    workspaces: Dict[str, Any] = {"skipped": True}
+    sync_budget = REMINDER_DELIVERY_BATCH - int(summary.get("due") or 0) - 4 * max(nudge_limit, 0)
+    try:
+        if sync_budget >= WORKSPACE_SYNC_MIN_SUBREQUESTS and (
+            time.gmtime(time.time()).tm_min < 5
+            or any(workspace_name_missing(w) for w in await db_get_user_workspaces(env, None))
+        ):
+            workspaces = await sync_workspace_details(env, budget=sync_budget)
+    except Exception as error:
+        log_exception_one_line(error, "scheduled_workspace_sync_failed")
+        workspaces = {"error": "workspace_sync_failed"}
     return json_response(
-        {"ok": True, "reminders": summary, "pr_review_nudges": nudges, "event_retention": retention}
+        {
+            "ok": True,
+            "reminders": summary,
+            "pr_review_nudges": nudges,
+            "event_retention": retention,
+            "workspaces": workspaces,
+        }
     )
 
 
@@ -8119,6 +8473,13 @@ async def handle_request(request: Any, env: Any, ctx: Any = None) -> Any:
 
     if method == "GET" and normalized_path == "/api/workspaces-public":
         return json_response(await cached_public_connections_payload(env))
+
+    if method == "GET" and normalized_path.startswith("/api/workspaces/"):
+        team_id = normalized_path[len("/api/workspaces/"):]
+        dashboard = await db_workspace_dashboard(env, team_id) if re.fullmatch(r"[A-Z0-9]{2,20}", team_id) else None
+        if not dashboard:
+            return json_response({"ok": False, "error": "Workspace not found"}, status=404)
+        return json_response({"ok": True, "workspace": dashboard})
 
     if method in ("GET", "HEAD") and normalized_path == "/logo-hit":
         params = parse_qs(parsed_url.query)

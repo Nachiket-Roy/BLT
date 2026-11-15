@@ -17,8 +17,17 @@ export const JOBS = [
   { name: "blt-sizzle", binding: "SIZZLE", cron: "*/15 * * * *" },
   { name: "blt-netguardian", binding: "NETGUARDIAN", cron: "*/5 * * * *" },
   { name: "my-gsoc-tool", binding: "GSOC_TOOL", cron: "3 0 * * *" },
+  // The directory of live dashboards: 3 sites per call (each probe is up to 9 GETs and GitHub
+  // allows 30 searches a minute); 20 calls cover 60 sites. Idle once the day's run is done.
+  { name: "my-gsoc-tool-directory", binding: "GSOC_TOOL", cron: "33-52 0 * * *", task: "directory" },
   { name: "hackerhouse", binding: "HACKERHOUSE", cron: "2-59/5 * * * *" },
   { name: "blt-sammich", binding: "SAMMICH", cron: "4-59/5 * * * *" },
+  // New OWASP www-project repositories to #project-new-projects: hourly at :41. A run is 1 GitHub
+  // request, 1 KV read, and only when something is new, 2 raw index.md reads per repository and 1 Slack post.
+  { name: "blt-owasp-projects", binding: "OWASP_PROJECTS", cron: "41 * * * *", task: "new-projects" },
+  // New OWASP issues to Slack (SLACK_NEW_ISSUES_WEBHOOK): hourly at :43. 1 GitHub search, 1 KV read,
+  // and 1 Slack post only when something is new.
+  { name: "blt-owasp-issues", binding: "OWASP_PROJECTS", cron: "43 * * * *", task: "new-issues" },
 ];
 // blt-gsoc-progress (task "progress", 23:07-23:11) was removed on 2026-10-18: GSoC 2026 coding
 // ended on 17 Aug. The task code and its KV data stay, so /data/progress.json keeps the final state.

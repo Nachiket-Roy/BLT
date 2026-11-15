@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>OWASP Open Issues and Pull Requests</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Good first issues, help wanted and pull requests waiting for review across every OWASP project, in sortable tables.">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="OWASP BLT">
+    <meta property="og:url" content="https://projects.owaspblt.org/open">
+    <meta property="og:title" content="OWASP open issues and pull requests">
+    <meta property="og:description" content="Good first issues, help wanted and pull requests waiting for review across every OWASP project, in sortable tables.">
+    <meta property="og:image" content="https://projects.owaspblt.org/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:alt" content="OWASP Project Matrix: project cards with language bars, good first issues, help wanted and PRs to review">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="OWASP open issues and pull requests">
+    <meta name="twitter:description" content="Good first issues, help wanted and pull requests waiting for review across every OWASP project, in sortable tables.">
+    <meta name="twitter:image" content="https://projects.owaspblt.org/og.png">
+    <script src="theme-init.js"></script>
+    <script src="https://owaspblt.org/_shared/blt-nav.js" defer></script>
+    <link rel="stylesheet" href="matrix.css">
+</head>
+<body>
+    <blt-nav project="blt-owasp-projects" name="Projects" current="auto">
+        <a href="index.html">Projects</a>
+        <a href="projects.html">Repos</a>
+        <a href="open.html?kind=issues">Issues</a>
+        <a href="open.html?kind=prs">Pull requests</a>
+        <a href="https://git.owaspblt.org/BLT/BLT-OWASP-Projects" slot="actions" data-primary target="_blank" rel="noopener noreferrer">Source code</a>
+    </blt-nav>
+
+    <main class="wrap">
+        <header class="hero">
+            <p class="eyebrow"><a href="index.html">OWASP Project Matrix</a></p>
+            <h1 id="heading">Open issues</h1>
+            <p class="lede">Everything open on GitHub across every OWASP project's repository. Pick a quick view to find
+                something to work on or review, then sort any column.</p>
+            <nav class="tabs" aria-label="Show">
+                <a id="tab-issues" href="open.html?kind=issues">Issues <span id="n-issues"></span></a>
+                <a id="tab-prs" href="open.html?kind=prs">Pull requests <span id="n-prs"></span></a>
+            </nav>
+            <dl class="totals" id="totals" aria-live="polite"></dl>
+            <p class="updated" id="updated"></p>
+        </header>
+
+        <section class="views-wrap" aria-label="Quick views">
+            <div class="views" id="views"></div>
+            <p class="view-help" id="view-help"></p>
+        </section>
+
+        <section class="toolbar" aria-label="Filter">
+            <label class="search">
+                <span class="sr-only">Search</span>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.38 8.82l3.65 3.65-1.06 1.06-3.65-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+                <input id="q" type="search" placeholder="Search title, project, repository, author, label" autocomplete="off">
+            </label>
+            <label class="field"><span>Project</span>
+                <select id="project"><option value="">All projects</option></select>
+            </label>
+            <label class="field"><span>Language</span>
+                <select id="lang"><option value="">Any language</option></select>
+            </label>
+            <label class="field"><span>Level</span>
+                <select id="level">
+                    <option value="">Any level</option>
+                    <option value="flagship">Flagship</option>
+                    <option value="production">Production</option>
+                    <option value="lab">Lab</option>
+                    <option value="incubator">Incubator</option>
+                    <option value="other">Other</option>
+                </select>
+            </label>
+            <label class="check"><input id="bots" type="checkbox"> Include bots</label>
+        </section>
+
+        <p class="count" id="count" aria-live="polite">Loading…</p>
+        <div class="table-wrap">
+            <table class="work" id="table">
+                <thead id="thead"></thead>
+                <tbody id="tbody"></tbody>
+            </table>
+        </div>
+        <p class="more"><button type="button" id="more" hidden></button></p>
+    </main>
+
+    <script src="safe-html.js"></script>
+    <script src="open.js"></script>
+</body>
+</html>

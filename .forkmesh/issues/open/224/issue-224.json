@@ -1,0 +1,92 @@
+{
+    "assignees": [],
+    "author": "VJAr5lCdBD4mHhE9xI32zT-lIIkXDt6C3dZdu7JLqZ0",
+    "authorName": "arnavghai19",
+    "bountyAddress": "",
+    "bountyStatus": "",
+    "bountyUsd": 0,
+    "createdAt": 1793218485380,
+    "endDate": 0,
+    "events": [
+        {
+            "attachments": [],
+            "author": "VJAr5lCdBD4mHhE9xI32zT-lIIkXDt6C3dZdu7JLqZ0",
+            "authorName": "arnavghai19",
+            "authorVerified": true,
+            "body": "## Description\n\nThe BLT-Leaf data display test runner may fail on Windows when attempting to start the local Wrangler development server. It currently spawns `npx.cmd` directly, which can result in a `spawn EINVAL` error because Node.js does not reliably spawn Windows command scripts without a shell.\n\nUsing a shell to work around this can also complicate termination of the Wrangler process after the tests finish.\n\n### Expected Behavior\nThe data display test runner should start the local Wrangler server successfully on Windows and clean up the child process when testing is complete.\n\n### Proposed Solution\nUse `process.execPath` to invoke Wrangler's JavaScript entry point directly on Windows. Preserve the existing `npx wrangler` behavior on Linux and macOS.\n\n### Verification\nThe proposed fix was tested on Windows with Node.js v22.11.0:\n- Python unit tests: 11 passed\n- HTML escape test: passed\n- Data display and runtime authentication tests: 94 passed\n\nThe tests were run individually because `npm test` could not find the `python3` command in the local Git Bash environment.",
+            "id": "open-web-1793218485380",
+            "sig": "e_VbuhdA_kmeK__50Hv9l7HESMOE3SNXKHmPTK99LeKIpoNfydhjgOpL9yxKDh4ZPnHfC1C6A69xqiTWQ8l7BA",
+            "title": "Windows: BLT-Leaf data display tests cannot spawn npx.cmd",
+            "ts": 1793218485380,
+            "type": "open"
+        },
+        {
+            "assignee": "arnavghai19",
+            "author": "VJAr5lCdBD4mHhE9xI32zT-lIIkXDt6C3dZdu7JLqZ0",
+            "authorName": "arnavghai19",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1793218506746-1hbwzez",
+            "sig": "v6Gzj72P-N8qZ1JifkWlIO0QeF-ktygDCJzSibiVmZ33IdT7eP9Hd8UfULepc66kCJ3lcPbmc7YTyDwiawLXAg",
+            "ts": 1793218506746,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "1IjcdW9JCaXjDBlKkyQReX4pPsdod5yjrnO8WZhfwh0",
+            "authorName": "granger",
+            "authorVerified": true,
+            "body": "Unlinked pull request #55",
+            "id": "comment-web-1793623148199",
+            "sig": "gLQgFUblBtM0iVQj8AZE3-CUPpM9koAE9SwNy1Ysqj-r_h9UwVKP_7dCPqSnOJN9vhxuBbwJ9hf7K5j-MUM_BA",
+            "ts": 1793623148199,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "VJAr5lCdBD4mHhE9xI32zT-lIIkXDt6C3dZdu7JLqZ0",
+            "authorName": "arnavghai19",
+            "authorVerified": true,
+            "body": "Unlinked pull request #46",
+            "id": "comment-web-1793623867336",
+            "sig": "52BurOf7A1k_qQA-TPkJ3c2njklEBZdBVSD-LOLHWLGY7asJ14UkP0eK56W5jXckt_Wh3uSCG4z1KHBDp_Q6Ag",
+            "ts": 1793623867336,
+            "type": "comment"
+        },
+        {
+            "assignee": "arnavghai19",
+            "author": "VJAr5lCdBD4mHhE9xI32zT-lIIkXDt6C3dZdu7JLqZ0",
+            "authorName": "arnavghai19",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "claim-web-1793888553344-dbg5nw",
+            "sig": "IYnNWD0gRDqrj5lT1M21FCQ9GfoKomJdvzIIZIFV-afQsb2Y8SE7kdPd5tfoOHSGxRTOzWNyY2hYK3f9wp44BQ",
+            "ts": 1793888553344,
+            "type": "claim"
+        },
+        {
+            "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
+            "authorName": "blt-tasks[bot]",
+            "id": "blt-tasks-smart-labels-224",
+            "labels": [
+                "blt-leaf"
+            ],
+            "sig": "DA8pZ_oDC7t5QXJ8-pW6kxyuZ_krz_7F4ZGCXJ92m2id4VKw3sA6D6Ba6rOVVfvkkpa-2UzWG1HgevJlzXhiCw",
+            "ts": 1794025420133,
+            "type": "labels"
+        }
+    ],
+    "labels": [
+        "blt-leaf"
+    ],
+    "milestone": "",
+    "number": 224,
+    "priority": 0,
+    "progress": 0,
+    "schema": "forkmesh-issue-v1",
+    "startDate": 0,
+    "status": "open",
+    "title": "Windows: BLT-Leaf data display tests cannot spawn npx.cmd",
+    "updatedAt": 1794025420133,
+    "votes": 0
+}

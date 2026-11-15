@@ -50,12 +50,14 @@ In the table, CF means `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, which
 | `blt-owasp-projects--refresh-data.yml` | GitLab `refresh_data` | `23 4 * * *`; seeds from the live site, writes changed data files to KV (`blt-owasp-projects/scripts/refresh-kv.sh`), no commit | `GH_API_TOKEN`, CF (with KV write) |
 | `blt-owasp-projects--sweep-repos.yml` | GitLab `sweep_repos` (manual) | dispatch only | `GH_API_TOKEN`, `SLACK_WEBHOOK_URL_SWEEP` |
 | `blt-pages--update-leaderboard.yml` | GitLab `update_leaderboard` | issue events on blt-pages or `[NOMINATION]` issues, `11 5 * * *` (safety net), push under `blt-pages/scripts/` or of the two pre-rendered pages or `public/data/leaders.json`; reads git.owaspblt.org and writes to KV (`blt-pages/scripts/refresh-kv.sh`), no commit | CF (with KV write) |
+| `blt-pool--mentor.yml` | BLT-Pool `/mentor`, `/rematch`, `/unmentor` (GitHub App commands) | issue comments (created) starting a line with one of them; dispatch input `issue`. Verified authors only. Reads the pool from `GET https://pool.owaspblt.org/api/mentors`, replies through the job API and toggles the `mentor-assigned` label (see /mentor). No commit | none |
 | `blt-panini--update_slack_apps.yml` | GitHub | `0 0 * * 0`; seeds from KV with the committed entries over it, writes `slack_apps.json` to KV when changed (`blt-panini/scripts/refresh-kv.sh`), no commit | CF (with KV read/write) |
 | `blt-profiles--add-profile.yml` | GitLab issue webhook in the blt-profiles Worker | issues opened/edited/labeled that look like Add-profile submissions (labels `profile`/`add-profile`/`profile-submission`, a `[blt-profiles]` title, or the template headings); dispatch input `issue`. Commits `public/profiles/<user>.json` and `index.json`, deploys, comments and closes | CF |
 | `blt-tomato--scrape_funding.yml` | GitHub | `0 18 * * 5`, push under `blt-tomato/.github/scripts/` or `scripts/refresh-kv.sh`; writes `index.html` and `project_repos_links.json` to KV (`blt-tomato/scripts/refresh-kv.sh`), no commit | `GH_API_TOKEN`, CF (with KV write) |
 | `blt-university--course-submission.yml` | GitHub | issue opened with `course-submission` or `[COURSE]` title, or that label added | none |
 | `blt-university--enrollment.yml` | GitHub | issue opened with `enrollment` or `[ENROLLMENT]` title, or that label added | none |
 | `blt-waypoint--build-site.yml` | GitLab `build_site` | `29 6 * * *`, push of `blt-waypoint/scripts/generate_forge_data.py`, `forge_urls.py` or `scripts/routing/projects.tsv`; reads git.owaspblt.org and writes `forge_data.json` to KV, no commit | CF (with KV write) |
+| `renovate.yml` | new (discussion #1) | `41 3 * * 1` (Mondays); dispatch input `mode` (`pulls`, `report` or `dry-run`). Renovate looks up updates; `scripts/renovate/apply.mjs` opens or updates at most 5 signed pull requests and refreshes the Dependency Dashboard issue. See [renovate.md](renovate.md) | `BLT_RENOVATE_SEED` (pulls), `GH_API_TOKEN` (optional) |
 
 ### /assign and /unassign
 
@@ -109,7 +111,31 @@ before this workflow (otherwise every comment is refused as unverified). `BLT_TA
 contents of `~/.config/blt/blt-tasks.seed`, base64url, or 64 hex characters, under the repository's
 Settings tab, "Actions secrets") is needed only for the fallback.
 
-### Stale claims
+### /mentor
+
+`blt-pool/forge/mentor.mjs` answers the mentor pool's commands on forge issues. The pool itself stays
+in BLT-Pool's D1 (pool.owaspblt.org, where mentors sign up); the script reads the published mentors
+from `GET /api/mentors` (`BLT_POOL_URL` overrides the base).
+
+- `/mentor` matches the commenter with a mentor who gave a git.owaspblt.org account (`forge_username`
+  in the pool; set on the signup form or by an admin). Mentors without one are never matched, since
+  the `@name` in the reply is how the request reaches them. Mentors whose specialties match an issue
+  label come first, then the fewest open mentored issues (under their `max_mentees` cap), then the
+  name; the commenter is never their own mentor. Issues labelled `security`, `vulnerability`,
+  `security-sensitive` or `private-security` go to the maintainers instead.
+- `/rematch` (the person who asked, or the mentor) moves the issue to another mentor; the previous
+  one is skipped. `/unmentor` (the same two people) cancels the match.
+- Asking for a mentor does not assign anyone; the reply points at `/assign`, and the `/assign` reply
+  points at `/mentor`.
+- Every reply ends with the commenter's referral link, `https://pool.owaspblt.org/?ref=<name>#join-mentor`,
+  which fills in "Referred By" on the signup form. `referred_by` accepts a GitHub or a forge account.
+
+The match lives in the ledger: the reply carries `<!-- blt-mentor-match:<mentor>:<requester> -->` or
+`<!-- blt-mentor-clear -->`, and only verified bot comments are read back, so the current mentor of
+every open issue, and with it each mentor's load, comes from `.forkmesh/issues`. `<!-- blt-mentor:<key> -->`
+(keyed like `/assign`) marks a command answered. The `mentor-assigned` label follows the match on a
+best-effort basis. When the pool cannot be read, the command still gets the "no mentor has room" reply.
+
 
 BLT-Action is the only bot that answers `/assign` (issue #38). BLT-Pool (`blt-pool`, the
 `blt-github-app` Worker) ignores `/assign` and `/unassign`, and its 2-hourly blt-cron job, which swept
@@ -179,11 +205,11 @@ Responses carry `Cache-Control: public, max-age=60, stale-while-revalidate=600`,
 | --- | --- | --- | --- |
 | `blt-hackathons` | `/stats.json`, `/hackathon-data/*.json` (and the unserved refresh state `state/fetch-state.json`) | `blt-hackathons--update-stats.yml`, every 6 hours, through the Cloudflare KV API (`scripts/worker-data/kv-get.sh`, `kv-put.sh`) | none |
 | `blt-gsoc` | `/js/gsoc2026_stats.generated.js`, `/data/progress.json` | no longer scheduled: GSoC 2026 ended, and `gsoc2026-stats` counted the frozen OWASP-BLT/* GitHub copies; both keep serving their final data from KV (run `POST /__scheduled` with a task by hand if needed) | `CRON_SECRET`, `GH_API_TOKEN`, `GITLAB_TOKEN` (optional), `SLACK_TOKEN_OWASP`, `SLACK_TOKEN_BLT` |
-| `my-gsoc-tool` | `/data/github-contributions.json`, `/data/forks.json` | the Worker, from blt-cron at 00:03 | `CRON_SECRET`, `GH_API_TOKEN` |
+| `my-gsoc-tool` | `/data/github-contributions.json`, `/data/forks.json`, `/data/directory.json` | the Worker, from blt-cron at 00:03 (directory: 00:33-00:52) | `CRON_SECRET`, `GH_API_TOKEN` |
 | `blt-pages` | `/`, `/index.html`, `/leaderboard`, `/leaderboard.html` (pre-rendered), `/data/leaderboard.json`, `/data/leaders.json` | `blt-pages--update-leaderboard.yml` (issue events, daily, pushes of the pages) through the Cloudflare KV API | none |
 | `blt-design-contest` | `/`, `/index.html`, `/show-all-entries.html`, `/<contest>.html` and the extensionless forms | `blt-design-contest--build-showcase.yml` (issue events, daily), only pages whose content changed | none |
 | `blt-waypoint` | `/forge_data.json` (also at the old `/gitlab_data.json`) | `blt-waypoint--build-site.yml`, daily: per-folder `history?path`, the issue and pull ledgers (about 200 anonymous requests, `FORGE_BUDGET_SECONDS` 420) | none |
-| `blt-owasp-projects` | `/www_project_repos.json`, `/repo_status.json`, `/issues.json`, `/known_issue_ids.json`, `/project_repos_links.json` | `blt-owasp-projects--refresh-data.yml`, daily (seeded from the live site) | none |
+| `blt-owasp-projects` | `/www_project_repos.json`, `/repo_status.json`, `/issues.json`, `/known_issue_ids.json`, `/project_repos_links.json` (and the unserved alert state `state:new-project-ids`) | `blt-owasp-projects--refresh-data.yml`, daily (seeded from the live site); the new-repository and new-issue Slack alerts run in the Worker, from blt-cron hourly at :41 and :43 (`state:new-issue-ids` too) | `CRON_SECRET`, `SLACK_WEBHOOK_URL` (#project-new-projects), `SLACK_NEW_ISSUES_WEBHOOK`, `GH_API_TOKEN` (optional) |
 | `blt-owasp-bumper` | `/` and `/index.html` (key `index.html`) | `blt-owasp-bumper--generate-repo-list.yml`, daily | none |
 | `blt-ossh` | `/data/ossh_catalog.json` | `blt-ossh--update-catalog.yml`, daily (`kv-get.sh`, `kv-put.sh`) | none |
 | `blt-owasp-metadata` | `/data/metadata.json`, `/data/metadata_matrix.json`, `/data/metadata.csv`, `/data/metadata_matrix.csv`, `/data/metadata_summary.md` | `blt-owasp-metadata--scraper.yml`, weekly | none |

@@ -1,0 +1,71 @@
+{
+    "assignees": [
+        "hrinkar01"
+    ],
+    "author": "RstIDDJG6C6U1Pai9khxpJmAfEPyL4aIsmU-ctc0kJM",
+    "authorName": "hrinkar01",
+    "bountyAddress": "",
+    "bountyStatus": "",
+    "bountyUsd": 0,
+    "createdAt": 1794593422915,
+    "endDate": 0,
+    "events": [
+        {
+            "attachments": [],
+            "author": "RstIDDJG6C6U1Pai9khxpJmAfEPyL4aIsmU-ctc0kJM",
+            "authorName": "hrinkar01",
+            "authorVerified": true,
+            "body": "## Context\n\nIn `blt-dash/src/index.py`, requests to static assets (`/`, `/logo.svg`, etc.) are served by returning `await env.ASSETS.fetch(request)` directly. Because the raw asset response is returned without being wrapped:\n\n1. **Missing Security Headers:** The dashboard is served without `X-Frame-Options`, `X-Content-Type-Options`, or `Content-Security-Policy`, leaving the dashboard unprotected against framing/clickjacking and MIME-sniffing.\n\n2. **Missing CORS on GET:** While `cors_headers` (`Access-Control-Allow-Origin: *`) is defined at the top of `on_fetch` and returned for `OPTIONS` preflight and 500 error responses, it is never attached to the static asset responses returned by `env.ASSETS.fetch(request)`.\n\n3. **Repository Inconsistency:** Other workers in the monorepo (such as `blt-next/workers/main.py`) explicitly define and attach `FRONTEND_SECURITY_HEADERS` to all client-facing responses.",
+            "id": "open-web-1794593422915",
+            "sig": "JTzG1Ah-D6sYsTXm51MYzxfkXW-xYpZSmKOn9Ycaco8u0zkFwltQyJ5jrVr3ssqFvaoysC4RPouqYCNcQjmbCA",
+            "title": "blt-dash: attach standard security headers (X-Frame-Options, CSP, nosniff) and CORS to asset responses",
+            "ts": 1794593422915,
+            "type": "open"
+        },
+        {
+            "assignee": "hrinkar01",
+            "author": "RstIDDJG6C6U1Pai9khxpJmAfEPyL4aIsmU-ctc0kJM",
+            "authorName": "hrinkar01",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1794593468276-1ocigpm",
+            "sig": "pajz3ckqDz7VNId5bqivS5pVn1cLWo63OueiSI3rvCg1cX8zEM73Zy9X_pHXkHBEKCoB6VRPA22UpCa6QPuKBA",
+            "ts": 1794593468276,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "RstIDDJG6C6U1Pai9khxpJmAfEPyL4aIsmU-ctc0kJM",
+            "authorName": "hrinkar01",
+            "authorVerified": true,
+            "body": "PR Raised!\n\nhttps://git.owaspblt.org/BLT/issues/247",
+            "id": "comment-web-1794600017982",
+            "sig": "KaXp90tI6JC3jcRtGKu7tbkAlC5Ep_Da1RKy2nFy8B9i14K9vy7A1a9fJI4YjVtTI6SCL2K2VXXyMmUw4DOnCA",
+            "ts": 1794600017982,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "RstIDDJG6C6U1Pai9khxpJmAfEPyL4aIsmU-ctc0kJM",
+            "authorName": "hrinkar01",
+            "authorVerified": true,
+            "body": "PR Raised!\n\nhttps://git.owaspblt.org/BLT/pull/122",
+            "id": "edit-web-1794600198597-1e8kp5a",
+            "sig": "BieFwo2-mJleq5lMJ0Nzs8RX_3Pd68DW9i4mH58uMveJV48mULWgPNXfoO4N6mC9bx6n2JDy7L2pmZ-SYqQYDw",
+            "target": "comment-web-1794600017982",
+            "ts": 1794600198597,
+            "type": "edit"
+        }
+    ],
+    "labels": [],
+    "milestone": "",
+    "number": 247,
+    "priority": 0,
+    "progress": 0,
+    "schema": "forkmesh-issue-v1",
+    "startDate": 0,
+    "status": "open",
+    "title": "blt-dash: attach standard security headers (X-Frame-Options, CSP, nosniff) and CORS to asset responses",
+    "updatedAt": 1794600198597,
+    "votes": 0
+}

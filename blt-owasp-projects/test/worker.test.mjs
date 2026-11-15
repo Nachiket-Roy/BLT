@@ -35,12 +35,22 @@ test("pages are plain static assets", async () => {
 test("wrangler.toml runs the Worker first for exactly the data paths", () => {
   const toml = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
   const listed = [...toml.match(/run_worker_first = \[([^\]]*)\]/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(listed, DATA_PATHS);
+  assert.deepEqual(listed, [...DATA_PATHS, "/__scheduled"]);
   assert.match(toml, /^main = "worker\/index\.js"$/m);
   assert.match(toml, /binding = "DATA"\nid = "[0-9a-f]{32}"/);
 });
 
-test("refresh-kv.sh seeds live data and writes only good, changed files", () => {
+// refresh-kv.sh needs jq (its header says so); without it every check fails and nothing is seeded.
+const hasJq = (() => {
+  try {
+    execFileSync("jq", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+test("refresh-kv.sh seeds live data and writes only good, changed files", { skip: !hasJq && "jq is not installed" }, () => {
   const dir = mkdtempSync(join(tmpdir(), "owasp-projects-kv-"));
   try {
     const bin = join(dir, "bin");
@@ -57,7 +67,7 @@ case "$url" in
   *) exit 22 ;;
 esac
 `);
-    // python: stands in for the four generators.
+    // python: stands in for the generators (fetch_open_work.py writes nothing here, so its files are skipped).
     writeFileSync(join(bin, "fakepy"), `#!/bin/bash
 case "$1" in
   scripts/main.py) cp "$OUTPUT_DIR/www_project_repos.json" "${dir}/seen-repos"; echo '[{"id":1}]' > "$OUTPUT_DIR/www_project_repos.json" ;;
@@ -90,6 +100,7 @@ esac
     assert.doesNotMatch(out, /would write issues\.json/);
     assert.match(out, /scrape_github_links\.py failed/);
     assert.doesNotMatch(out, /would write project_repos_links\.json/);
+    assert.match(out, /skipping open_prs\.json/);
     out = run({ STATUS: "Bad credentials" });
     assert.match(out, /skipping repo_status\.json: no repository was read successfully/);
   } finally {

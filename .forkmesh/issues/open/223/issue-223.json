@@ -54,9 +54,38 @@
             "sig": "xIWPq839L2uZL6Pjm171C1Ys0OyGBLDJptIR2V--r0xpVPbFsuoKpbQb5ctJCnvaY77juIZBmhwiw_2aAZZzDQ",
             "ts": 1793125099038,
             "type": "comment"
+        },
+        {
+            "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
+            "authorName": "blt-tasks[bot]",
+            "id": "blt-tasks-smart-labels-223",
+            "labels": [
+                "blt-netguardian",
+                "blt-mcp",
+                "blt-cli"
+            ],
+            "sig": "Pgsy0eNfG0aukKouLEWBzn_EO05H2fdhv8FZlNPeeU5M_J4YTZrglX_xORB-sdKXOAecz3g9b_h_zA_4ljoAAQ",
+            "ts": 1794025420132,
+            "type": "labels"
+        },
+        {
+            "attachments": [],
+            "author": "Ma6IqwAvvF6fx9M14fqxrwLGw8I2d8jlxBbXE5oaZZs",
+            "authorName": "nachiket",
+            "authorVerified": true,
+            "body": "\n## Overview\n\n**BLT-NetGuardian** continuously maps the web perimeter through distributed domain crawling, detecting security misconfigurations (such as missing CSP, weak HSTS, server version disclosure, and TLS flaws) and ingesting HMAC-signed findings (`ztr-finding-1`) into Cloudflare D1.\n\nCurrently, NetGuardian operates in isolation: scans rely on a desktop Flutter GUI, and triaging requires manual human review on a web dashboard. \n\nThis proposal bridges **NetGuardian** with **BLT-MCP** and **BLT-CLI**:\n\n### 1. What NetGuardian Provides\n* **Continuous Discovery Queue**: Live feed of discovered domains and targets needing security inspection.\n* **Verified Perimeter Findings**: Cryptographically signed findings containing raw HTTP headers, SSL metadata, and `security.txt` references.\n\n### 2. How We Will Use It in BLT-MCP\n* **Expose Findings to AI Agents**: Surface `netguardian://findings` and `netguardian://queue` as MCP resources.\n* **Automated Triage \u0026 Deduplication**: Allow AI agents running via MCP to analyze raw headers, filter false positives, and evaluate severity against OWASP standards.\n* **Automated Bug Promotion**: Provide an MCP tool for agents to redact sensitive data and convert verified NetGuardian findings directly into official BLT issues/bug bounties.\n\n### 3. How We Will Use It in BLT-CLI\n* **Headless Rust Scanning Node**: Introduce `blt-cli netguardian run-node`, enabling lightweight, high-performance scanning on servers, CI pipelines, or background daemons without requiring a GUI.\n* **Cockpit Triage**: Allow maintainers to inspect and triage NetGuardian findings directly within the terminal UI.",
+            "id": "edit-web-1794500170146-wgq15h",
+            "sig": "nIcosJL5ikVwnFQTZwf7aCQ-Y6e6xWwZTOpPUNxiwV33ouILNEHDr-wBUA1uji0KRO_btz14FxseXdu96HbRBg",
+            "target": "open-web-1793124926006",
+            "ts": 1794500170146,
+            "type": "edit"
         }
     ],
-    "labels": [],
+    "labels": [
+        "blt-netguardian",
+        "blt-mcp",
+        "blt-cli"
+    ],
     "milestone": "",
     "number": 223,
     "priority": 0,
@@ -65,6 +94,6 @@
     "startDate": 0,
     "status": "open",
     "title": "Integrating BLT-NetGuardian with BLT-MCP and BLT-CLI",
-    "updatedAt": 1793125099038,
+    "updatedAt": 1794500170146,
     "votes": 0
 }

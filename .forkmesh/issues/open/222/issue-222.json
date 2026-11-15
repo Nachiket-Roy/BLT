@@ -1,7 +1,5 @@
 {
-    "assignees": [
-        "dahahanish"
-    ],
+    "assignees": [],
     "author": "EqNbJ81Ib7tk86tkz55_EDo4gCk4z8HvrLf8ewzPc5c",
     "authorName": "dahahanish",
     "bountyAddress": "",
@@ -32,9 +30,144 @@
             "sig": "Ui8P-mGkdiqSojPnvZMlWkYj31PBV_SjvGtqqaLLUcDTQ8PjYz7IhM66uTTb8Vyt5dUsJkf2SHNiktxq21PEDQ",
             "ts": 1793020903749,
             "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@dahahanish there's been no pull request or comment from you here for 18 hours. If you're still working on this issue, please comment with an update or open a pull request; otherwise you'll be unassigned in about 6 hours so someone else can pick it up. \u003c!-- blt-assign-stale-warning:dahahanish:1793020903749 --\u003e",
+            "id": "actions-1793634858492-VoSdnshb",
+            "sig": "atU6Tny17OjqphD6TCAj9QdLt_pEfAcGOiGXRp_8Q8E-_we3UWexdRGsrHgfMNxuju72psPRBhZpwkwBbg53BQ",
+            "ts": 1793634858492,
+            "type": "comment"
+        },
+        {
+            "assignee": "dahahanish",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "actions-1793656395814-o0vyp0pj",
+            "sig": "GVnt4FrfoObaU8aVjN24l2aY66uAzwvjQqzrhg5lhXIhxlHdmkDPPKTvoDjp07J1YKW7B3DjzaN8b001fedNAA",
+            "ts": 1793656395814,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@dahahanish you've been unassigned from this issue because there was no pull request or update for 24 hours. It's open for others now; comment `/assign` to take it again. \u003c!-- blt-assign-stale:dahahanish:1793020903749 --\u003e",
+            "id": "actions-1793656395917-1KAXEKxL",
+            "sig": "JvbELj5P94AX6m8AJ_ma1YXunHrcuBaZ_0FsH1mZHPmZ_igWKQwEleniADNNAavfKvWbfiBz7AzIojBDOsymCA",
+            "ts": 1793656395917,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "VJAr5lCdBD4mHhE9xI32zT-lIIkXDt6C3dZdu7JLqZ0",
+            "authorName": "arnavghai19",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "comment-web-1793884891872",
+            "sig": "NdBj3CmVkEnbaU-MSWhOW1toOSgoh3fGU2Gge8mHVBu5kBn6ZOtoLWR8UvBuYpNYPNGdA2gon1-zfbd5W7K3AA",
+            "ts": 1793884891872,
+            "type": "comment"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@arnavghai19 you can't be assigned to this issue because you are already assigned to #224. Please open a pull request for it, or comment `/unassign` there, before taking another issue. \u003c!-- blt-assign-refused:arnavghai19 --\u003e \u003c!-- blt-assign:d307d96b588a6cf5a84a --\u003e",
+            "id": "actions-1793884909011-aEdNw8aQ",
+            "sig": "6am6XWgXOBtPiuMVTnLBJdkTUYxCryxucyFdiOMOGOrugkQe2NulluNmGeR-Asygb7qlsASv4viUj3G6EpRHDA",
+            "ts": 1793884909011,
+            "type": "comment"
+        },
+        {
+            "assignee": "arnavghai19",
+            "author": "VJAr5lCdBD4mHhE9xI32zT-lIIkXDt6C3dZdu7JLqZ0",
+            "authorName": "arnavghai19",
+            "authorVerified": true,
+            "claimState": "assigned",
+            "id": "claim-web-1793888581021-1n8bg28",
+            "sig": "mp5rLbr8jS9I8srE0tvmSXhWCeQGmUNANAueKr4VySTt1AZtNntCax9YGJWVjEsO7XsbhGVdjY8fzuOIUhV-DA",
+            "ts": 1793888581021,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "VJAr5lCdBD4mHhE9xI32zT-lIIkXDt6C3dZdu7JLqZ0",
+            "authorName": "arnavghai19",
+            "authorVerified": true,
+            "body": "/assign",
+            "id": "edit-web-1793888616758-qtbl37",
+            "sig": "0uc8BYEDogRKVG4MyaTeQD_j3mbtin8y0Lw9KknBDcsmAJxBc_uFVS2oeFvz35wIP_uYPUMi5Y2EOSm0Xs6KDQ",
+            "target": "comment-web-1793884891872",
+            "ts": 1793888616758,
+            "type": "edit"
+        },
+        {
+            "attachments": [],
+            "author": "VJAr5lCdBD4mHhE9xI32zT-lIIkXDt6C3dZdu7JLqZ0",
+            "authorName": "arnavghai19",
+            "authorVerified": true,
+            "body": "Hey, I investigated issue #222 and traced the likely cause to the ForkMesh app's Worker asset-routing configuration rather than the BLT monorepo.\n\nI noticed you mentioned having a fix ready on a branch. Would you mind sharing the branch or PR so I can review the implementation and help with testing or any remaining work?\n\nI'd prefer to build on your existing work rather than duplicate it.",
+            "id": "comment-web-1793889875130",
+            "sig": "SNjK1z504rpgoRQZl3oBp1ghBcWX-YpRj_kRrG3CIa1sQNRM0JDxRSx2PR2yOmp_Z56ChXi1jw-m35n84x9cDA",
+            "ts": 1793889875130,
+            "type": "comment"
+        },
+        {
+            "author": "57n0Jzw6X_ZXGKepvtU22m2lizrPDrmq4ko2gUUSlmk",
+            "authorName": "blt-tasks[bot]",
+            "id": "blt-tasks-smart-labels-222",
+            "labels": [
+                "forge"
+            ],
+            "sig": "J9kklA3-UK8kphifh88CKr_6QBATYfzjaqUzD7NWDH3dyQrBWmHGhTByvWXXSREafPKZEMYBFjI3AYvZ8YV2CQ",
+            "ts": 1794025420132,
+            "type": "labels"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@arnavghai19 there's been no pull request or comment from you here for 18 hours. If you're still working on this issue, please comment with an update or open a pull request; otherwise you'll be unassigned in about 6 hours so someone else can pick it up. \u003c!-- blt-assign-stale-warning:arnavghai19:1793889875130 --\u003e",
+            "id": "actions-1794075105161-bqq7bSmi",
+            "sig": "u1hJAeh6G6WaN977GPyFxCIuLs67SbaQWwp6p_E74n1Hzq99MuojPNFRvHuGm0nxAUkuD2svyIlzmxFNg0BPAw",
+            "ts": 1794075105161,
+            "type": "comment"
+        },
+        {
+            "assignee": "arnavghai19",
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "claimState": "released",
+            "id": "actions-1794095592662-amRo0TvE",
+            "sig": "r-ml5SkAeHFEN3Z6_9NBNarV71Bz6GrxJt5o7xivIB9vSP12jknsLoctNFKcN9_t3Sv1MhCge_F2gLhxNRSMDQ",
+            "ts": 1794095592662,
+            "type": "claim"
+        },
+        {
+            "attachments": [],
+            "author": "6I64fbHumctKTTTVZW0cDPBfOLWC46GD_JhZa7h9aX8",
+            "authorName": "owasp-blt-actions",
+            "authorVerified": true,
+            "body": "@arnavghai19 you've been unassigned from this issue because there was no pull request or update for 24 hours. It's open for others now; comment `/assign` to take it again. \u003c!-- blt-assign-stale:arnavghai19:1793889875130 --\u003e",
+            "id": "actions-1794095592771-onDJvsTG",
+            "sig": "YxzuNLriLjwhLViYfOgBmB-Eb3LhXa-mLdu4k-BSoTalxtX58djD8-umfWj6Rqk_UUlw9RkcR61a3ldpdjrZBA",
+            "ts": 1794095592771,
+            "type": "comment"
         }
     ],
-    "labels": [],
+    "labels": [
+        "forge"
+    ],
     "milestone": "",
     "number": 222,
     "priority": 0,
@@ -43,6 +176,6 @@
     "startDate": 0,
     "status": "open",
     "title": "Web chat never starts: /fmm/*.js modules are routed to the repository router (404)",
-    "updatedAt": 1793020903749,
+    "updatedAt": 1794095592771,
     "votes": 0
 }
